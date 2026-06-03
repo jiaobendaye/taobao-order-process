@@ -143,7 +143,11 @@ func loadMapping(f *excelize.File, sheetName string) (map[string]string, error) 
 	return mapping, nil
 }
 
-// loadStallConfigs 从 Sheets 2+ 读取各档口配置
+// loadStallConfigs 从 Sheets 2+ 读取各档口配置（列式布局）
+//
+// 每个档口 Sheet 的格式：
+//   - Row 0: 各列的 自设编码（表头）
+//   - Row 1+: 每列为该自设编码对应的型号列表
 func loadStallConfigs(f *excelize.File, sheetNames []string) ([]StallConfig, error) {
 	stalls := make([]StallConfig, 0, len(sheetNames))
 
@@ -156,42 +160,32 @@ func loadStallConfigs(f *excelize.File, sheetNames []string) ([]StallConfig, err
 			continue // 空档口跳过
 		}
 
-		// 找列
-		headers := rows[0]
-		colCode := findColumn(headers, "自设编码")
-		colModel := findColumn(headers, "型号")
-		if colCode < 0 {
-			colCode = 0 // 默认第一列
-		}
-		if colModel < 0 {
-			colModel = 1 // 默认第二列
-		}
-
+		// Row 0: 自设编码表头，每个非空单元格是一个自设编码
+		headerRow := rows[0]
 		codes := make(map[string][]string)
-		for j := 1; j < len(rows); j++ {
-			row := rows[j]
 
-			code := ""
-			if colCode < len(row) {
-				code = strings.TrimSpace(row[colCode])
-			}
+		for col, code := range headerRow {
+			code = strings.TrimSpace(code)
 			if code == "" {
 				continue
 			}
 
-			// 收集该自设编码支持的所有型号（从型号列开始读取该行剩余所有列）
+			// 从 Row 1 开始读取该列下的所有型号
 			var models []string
-			for k := colModel; k < len(row); k++ {
-				if m := strings.TrimSpace(row[k]); m != "" {
-					m = stripInvisible(m)
-					if m != "" {
-						models = append(models, m)
-					}
+			for j := 1; j < len(rows); j++ {
+				if col >= len(rows[j]) {
+					continue
+				}
+				m := strings.TrimSpace(rows[j][col])
+				if m == "" {
+					continue
+				}
+				m = stripInvisible(m)
+				if m != "" {
+					models = append(models, m)
 				}
 			}
-
-			// 合并：同一自设编码可能出现多行（不同型号）
-			codes[code] = append(codes[code], models...)
+			codes[code] = models
 		}
 
 		stalls = append(stalls, StallConfig{
