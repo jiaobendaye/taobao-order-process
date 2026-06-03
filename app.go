@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,15 +58,42 @@ func (a *App) SaveFilterConfig(cfg FilterConfig) error {
 	})
 }
 
-// GetDangkouConfig 获取当前档口配置
-func (a *App) GetDangkouConfig() dangkou.Config {
-	return dangkou.LoadConfig()
+// DangkouConfigStore 自设编码文件路径的简单存储
+type DangkouConfigStore struct {
+	Path string `json:"path"`
 }
 
-// SaveDangkouConfig 保存档口配置
-func (a *App) SaveDangkouConfig(cfg dangkou.Config) error {
-	logger.Info("保存档口配置: codeFilter=%q stalls=%d条", cfg.CodeFilter, len(cfg.Stalls))
-	return dangkou.SaveConfig(&cfg)
+// GetDangkouConfigPath 获取已保存的自设编码文件路径
+func (a *App) GetDangkouConfigPath() string {
+	return dangkou.LoadConfigPath()
+}
+
+// SaveDangkouConfigPath 保存自设编码文件路径
+func (a *App) SaveDangkouConfigPath(path string) error {
+	if path == "" {
+		return fmt.Errorf("编码文件路径不能为空")
+	}
+	logger.Info("保存档口配置路径: %s", path)
+	return dangkou.SaveConfigPath(path)
+}
+
+// SelectDangkouConfigFile 打开文件选择对话框选择自设编码.xlsx
+func (a *App) SelectDangkouConfigFile() string {
+	path, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "选择自设编码 Excel 文件",
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "Excel文件 (*.xlsx)", Pattern: "*.xlsx"},
+			{DisplayName: "所有文件 (*.*)", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return ""
+	}
+	// 自动保存选中路径
+	if path != "" {
+		dangkou.SaveConfigPath(path)
+	}
+	return path
 }
 
 // PeijianConfig 配件配置组合
@@ -150,7 +178,11 @@ func (a *App) RunFilter(filePath string) FilterResult {
 // RunDangkou 执行档口分配
 func (a *App) RunDangkou(filePath string) DangkouResult {
 	logger.Info("开始档口分配: %s", filePath)
-	result, err := dangkou.Process(filePath)
+	configPath := a.GetDangkouConfigPath()
+	if configPath == "" {
+		return DangkouResult{Success: false, Error: "请先配置自设编码文件（点击档口分配旁的⚙按钮）"}
+	}
+	result, err := dangkou.Process(filePath, configPath)
 	if err != nil {
 		logger.Error("档口分配失败: %v", err)
 		return DangkouResult{Success: false, Error: err.Error()}

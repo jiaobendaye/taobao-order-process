@@ -1,0 +1,63 @@
+{
+  "stalls": [
+    {
+      "name": "科威达档口",
+      "codes": [
+        {
+          "code": "液态硅胶",
+          "models": [
+            "iPhone 17 Pro Max",
+            "iPhone 17 Pro",
+            "iPhone 17",
+            "iPhone 16 Pro Max",
+            "iPhone 16 Pro",
+            "iPhone 16",
+            "iPhone 15 Pro Max",
+            "iPhone 15 Pro",
+            "iPhone 15",
+            "iPhone 14 Pro Max",
+            "iPhone 14 Pro",
+            "iPhone 14"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "威金斯档口",
+      "codes": [
+        {
+          "code": "液态硅胶",
+          "models": [
+            "vivo X200 Ultra",
+            "vivo X200 Pro",
+            "华为 Mate 70 Pro",
+            "华为 Mate 40 Pro"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "酷霓档口",
+      "codes": [
+        {
+          "code": "液态硅胶",
+          "models": [
+            "小米 14",
+            "小米 15 Pro"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "飞鹏达档口",
+      "codes": [
+        {
+          "code": "液态硅胶",
+          "models": [
+            "OPPO Find X8 Ultra"
+          ]
+        }
+      ]
+    }
+  ]
+}

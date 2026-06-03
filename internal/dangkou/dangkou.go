@@ -1,6 +1,9 @@
 // Package dangkou 手机壳档口分配
 //
-// 根据型号（苹果/国产）和规格关键词将订单分配到对应档口
+// 根据自设编码 Excel 配置文件将订单分配到对应档口。
+// 配置文件 Sheet 1（自设编码）为 (商品ID, SKU名称) → 自设编码 映射表，
+// 后续每个 Sheet 为一个档口（Sheet 名即为档口名），
+// 按 Sheet 顺序决定档口优先级。
 package dangkou
 
 import (
@@ -9,151 +12,329 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"taobao/internal/logger"
+	"unicode/utf8"
 
 	"github.com/xuri/excelize/v2"
 )
 
-// StallRule 单个档口的匹配规则
-type StallRule struct {
-	Name      string   `json:"name"`      // 档口名称
-	AppleModel bool    `json:"appleModel"` // 是否匹配苹果型号
-	Keywords  []string `json:"keywords"`  // 规格关键词（任一命中即匹配）
+// ---- 类型定义 ----
+
+// StallConfig 单个档口的配置（从 Excel 的一个 Sheet 读取）
+type StallConfig struct {
+	Name     string              // 档口名称（Sheet 名）
+	Priority int                 // 优先级（0-based Sheet 顺序）
+	Codes    map[string][]string // 自设编码 → 支持的手机型号列表
 }
 
-// Config 档口配置
-type Config struct {
-	CodeFilter string      `json:"codeFilter"` // 商品商家编码必须包含的关键词，空=不过滤
-	Stalls     []StallRule `json:"stalls"`     // 档口规则列表，按顺序匹配
-}
-
-// DefaultConfig 返回内置默认配置
-func DefaultConfig() Config {
-	return Config{
-		CodeFilter: "液态",
-		Stalls: []StallRule{
-			{Name: "科威达档口", AppleModel: true, Keywords: nil},
-			{Name: "威金斯档口", AppleModel: false, Keywords: []string{"黑加仑", "海葡萄", "流光樱粉"}},
-			{Name: "酷霓档口", AppleModel: false, Keywords: []string{"灰粉", "芭蕾粉"}},
-			{Name: "飞鹏达档口", AppleModel: false, Keywords: []string{"Reno"}},
-		},
-	}
-}
-
-// LoadConfig 按优先级加载配置：可执行文件同目录 > 当前目录 > 默认
-func LoadConfig() Config {
-	cfg := DefaultConfig()
-
-	for _, p := range configSearchPaths("stalls.json") {
-		data, err := os.ReadFile(p)
-		if err != nil {
-			continue
-		}
-		var loaded Config
-		if err := json.Unmarshal(data, &loaded); err != nil {
-			continue
-		}
-		if len(loaded.Stalls) > 0 {
-			cfg.Stalls = loaded.Stalls
-		}
-		cfg.CodeFilter = loaded.CodeFilter
-		return cfg
-	}
-	return cfg
-}
-
-// SaveConfig 保存配置到可执行文件同目录
-func SaveConfig(cfg *Config) error {
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(ConfigPath("stalls.json"), data, 0644)
-}
-
-// ConfigPath 返回配置文件完整路径（可执行文件同目录）
-func ConfigPath(name string) string {
-	execPath, _ := os.Executable()
-	return filepath.Join(filepath.Dir(execPath), name)
-}
-
-func configSearchPaths(name string) []string {
-	execPath, _ := os.Executable()
-	execDir := filepath.Dir(execPath)
-	return []string{
-		filepath.Join(execDir, name),
-		name,
-	}
+// Engine 档口匹配引擎
+type Engine struct {
+	mapping map[string]string // "商品ID|SKU名称" → 自设编码
+	Stalls  []StallConfig     // 按优先级排序的档口列表
 }
 
 // Result 档口分配结果
 type Result struct {
 	StallOrders map[string][][]string `json:"-"`       // 档口名 → 订单行列表
-	Unassigned  [][]string            `json:"-"`       // 未分配的行
-	Summary     map[string]int        `json:"summary"` // 档口名 → 数量（含"未分配"）
+	NoCodeMatch [][]string            `json:"-"`       // 无匹配自设编码的行
+	Unassigned  [][]string            `json:"-"`       // 有自设编码但无档口匹配的行
+	Summary     map[string]int        `json:"summary"` // 档口名 → 数量
 	OutputDir   string                `json:"outputDir"`
 	Total       int                   `json:"total"`
 }
 
-// ---- 分类逻辑 ----
+// ---- 引擎加载 ----
 
-func isAppleModel(model string) bool {
-	model = strings.ToLower(strings.TrimSpace(model))
-	return strings.Contains(model, "iphone") || strings.HasPrefix(model, "苹果")
+// LoadEngine 从自设编码 Excel 文件加载匹配引擎
+func LoadEngine(configPath string) (*Engine, error) {
+	f, err := excelize.OpenFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("打开配置文件失败: %w", err)
+	}
+	defer f.Close()
+
+	sheets := f.GetSheetList()
+	if len(sheets) < 2 {
+		return nil, fmt.Errorf("配置文件至少需要2个Sheet（自设编码 + 至少1个档口）")
+	}
+
+	engine := &Engine{}
+
+	// Sheet 1: 自设编码映射表
+	mapping, err := loadMapping(f, sheets[0])
+	if err != nil {
+		return nil, fmt.Errorf("读取自设编码映射失败: %w", err)
+	}
+	engine.mapping = mapping
+
+	// 后续 Sheets: 各档口配置
+	stalls, err := loadStallConfigs(f, sheets[1:])
+	if err != nil {
+		return nil, fmt.Errorf("读取档口配置失败: %w", err)
+	}
+	engine.Stalls = stalls
+
+	return engine, nil
 }
 
-// classifyStall 按配置规则分类
-func classifyStall(spec string, cfg *Config) string {
-	model := spec
-	detail := ""
-	if idx := strings.Index(spec, "|"); idx >= 0 {
-		model = spec[:idx]
-		detail = spec[idx+1:]
+// loadMapping 从 Sheet 1 读取 (商品ID, SKU名称) → 自设编码 映射
+func loadMapping(f *excelize.File, sheetName string) (map[string]string, error) {
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) < 2 {
+		return nil, fmt.Errorf("自设编码Sheet数据行不足")
 	}
 
-	fullSpec := model + detail
+	// 找列
+	headers := rows[0]
+	colProductID := findColumn(headers, "商品ID")
+	colSKU := findColumn(headers, "SKU名称")
+	colCode := findColumn(headers, "自设编码")
+	if colProductID < 0 {
+		return nil, fmt.Errorf("未找到「商品ID」列")
+	}
+	if colSKU < 0 {
+		return nil, fmt.Errorf("未找到「SKU名称」列")
+	}
+	if colCode < 0 {
+		return nil, fmt.Errorf("未找到「自设编码」列")
+	}
 
-	for _, rule := range cfg.Stalls {
-		if rule.AppleModel && isAppleModel(model) {
-			return rule.Name
-		}
-		for _, kw := range rule.Keywords {
-			if strings.Contains(fullSpec, kw) {
-				return rule.Name
+	// 同时用 GetCellValue 读取商品ID（避免科学计数法问题）
+	// 先用 GetRows 的行数循环，再用 GetCellValue 取商品ID
+	mapping := make(map[string]string, len(rows)-1)
+	for i := 1; i < len(rows); i++ {
+		row := rows[i]
+
+		// 商品ID 使用 GetCellValue 读取以避免大数字精度问题
+		productIDCell, _ := excelize.CoordinatesToCellName(colProductID+1, i+1)
+		productID := strings.TrimSpace(getCellValueSafe(f, sheetName, productIDCell))
+		if productID == "" {
+			// 回退到 GetRows 的值
+			if colProductID < len(row) {
+				productID = strings.TrimSpace(row[colProductID])
 			}
 		}
+
+		skuName := ""
+		if colSKU < len(row) {
+			skuName = strings.TrimSpace(row[colSKU])
+		}
+
+		code := ""
+		if colCode < len(row) {
+			code = strings.TrimSpace(row[colCode])
+		}
+
+		if productID == "" || skuName == "" || code == "" {
+			continue
+		}
+
+		key := productID + "|" + skuName
+		mapping[key] = code
 	}
-	return "未分配"
+
+	if len(mapping) == 0 {
+		return nil, fmt.Errorf("自设编码映射表为空")
+	}
+
+	return mapping, nil
+}
+
+// loadStallConfigs 从 Sheets 2+ 读取各档口配置
+func loadStallConfigs(f *excelize.File, sheetNames []string) ([]StallConfig, error) {
+	stalls := make([]StallConfig, 0, len(sheetNames))
+
+	for i, sheetName := range sheetNames {
+		rows, err := f.GetRows(sheetName)
+		if err != nil {
+			return nil, fmt.Errorf("读取Sheet「%s」失败: %w", sheetName, err)
+		}
+		if len(rows) < 2 {
+			continue // 空档口跳过
+		}
+
+		// 找列
+		headers := rows[0]
+		colCode := findColumn(headers, "自设编码")
+		colModel := findColumn(headers, "型号")
+		if colCode < 0 {
+			colCode = 0 // 默认第一列
+		}
+		if colModel < 0 {
+			colModel = 1 // 默认第二列
+		}
+
+		codes := make(map[string][]string)
+		for j := 1; j < len(rows); j++ {
+			row := rows[j]
+
+			code := ""
+			if colCode < len(row) {
+				code = strings.TrimSpace(row[colCode])
+			}
+			if code == "" {
+				continue
+			}
+
+			// 收集该自设编码支持的所有型号（从型号列开始读取该行剩余所有列）
+			var models []string
+			for k := colModel; k < len(row); k++ {
+				if m := strings.TrimSpace(row[k]); m != "" {
+					m = stripInvisible(m)
+					if m != "" {
+						models = append(models, m)
+					}
+				}
+			}
+
+			// 合并：同一自设编码可能出现多行（不同型号）
+			codes[code] = append(codes[code], models...)
+		}
+
+		stalls = append(stalls, StallConfig{
+			Name:     sheetName,
+			Priority: i,
+			Codes:    codes,
+		})
+	}
+
+	return stalls, nil
+}
+
+// getCellValueSafe 安全读取单元格值（处理合并单元格等情况）
+func getCellValueSafe(f *excelize.File, sheet, cell string) string {
+	v, err := f.GetCellValue(sheet, cell)
+	if err != nil {
+		return ""
+	}
+	return v
+}
+
+// ---- 字符串处理 ----
+
+// StripBracketSuffix 去除字符串末尾的 [...] 或 【...】 后缀
+func StripBracketSuffix(s string) string {
+	s = strings.TrimSpace(s)
+	// 去除末尾 [...]
+	for {
+		idx := strings.LastIndex(s, "[")
+		if idx < 0 {
+			break
+		}
+		closeIdx := strings.LastIndex(s, "]")
+		if closeIdx == len(s)-1 && closeIdx > idx {
+			s = strings.TrimSpace(s[:idx])
+		} else {
+			break
+		}
+	}
+	// 去除末尾 【...】
+	for {
+		idx := strings.LastIndex(s, "【")
+		if idx < 0 {
+			break
+		}
+		closeIdx := strings.LastIndex(s, "】")
+		if closeIdx == len(s)-utf8.RuneLen('】') && closeIdx > idx {
+			s = strings.TrimSpace(s[:idx])
+		} else {
+			break
+		}
+	}
+	return s
+}
+
+// stripInvisible 去除字符串两端的不可见字符（BOM、零宽空格等）
+func stripInvisible(s string) string {
+	return strings.TrimFunc(s, func(r rune) bool {
+		// U+FEFF BOM, U+200B ZWSP, U+200C ZWNJ, U+200D ZWJ, U+200E LRM, U+200F RLM
+		return r == 0xFEFF || r == 0x200B || r == 0x200C ||
+			r == 0x200D || r == 0x200E || r == 0x200F
+	})
+}
+
+// parseSpec 解析商品规格，返回 (型号, SKU名称)
+// 商品规格格式: "{Phone Model}|{SKU Name}[{Variant}]"
+func parseSpec(spec string) (model, skuName string) {
+	spec = strings.TrimSpace(spec)
+	if idx := strings.Index(spec, "|"); idx >= 0 {
+		model = strings.TrimSpace(spec[:idx])
+		skuName = StripBracketSuffix(spec[idx+1:])
+	} else {
+		model = spec
+		skuName = ""
+	}
+	return
+}
+
+// ---- 匹配方法 ----
+
+// LookupZisheBianma 根据商品ID和SKU名称查找自设编码。
+// 返回空字符串表示未找到。
+func (e *Engine) LookupZisheBianma(productID, skuName string) string {
+	key := productID + "|" + skuName
+	return e.mapping[key]
+}
+
+// FindStall 按档口优先级查找匹配该自设编码的档口。
+// 返回档口名称；若所有档口均不匹配则返回空字符串。
+func (e *Engine) FindStall(zisheBianma string) string {
+	for _, stall := range e.Stalls {
+		if _, ok := stall.Codes[zisheBianma]; ok {
+			return stall.Name
+		}
+	}
+	return ""
 }
 
 // ---- 主处理函数 ----
 
-// Process 读取 Excel 并分配档口
-func Process(filename string) (*Result, error) {
-	cfg := LoadConfig()
-	return ProcessWithConfig(filename, &cfg)
-}
+// Process 读取订单 Excel 并按自设编码配置分配档口。
+// configPath 为自设编码.xlsx 的路径；若为空则尝试从 dangkou_config.json 读取。
+func Process(filename, configPath string) (*Result, error) {
+	// 加载配置路径
+	if configPath == "" {
+		path, err := loadConfigPath()
+		if err != nil {
+			return nil, fmt.Errorf("未指定配置文件路径，且无法加载已保存的路径: %w\n请在GUI中先选择自设编码文件，或通过命令行传入: phonecase-tools dangkou <订单文件> <自设编码.xlsx>", err)
+		}
+		configPath = path
+	}
 
-// ProcessWithConfig 使用指定配置处理
-func ProcessWithConfig(filename string, cfg *Config) (*Result, error) {
+	// 加载引擎
+	engine, err := LoadEngine(configPath)
+	if err != nil {
+		return nil, err
+	}
+	logger.Info("已加载自设编码配置: %v", engine)
+
+	// 打开订单文件
 	f, err := excelize.OpenFile(filename)
 	if err != nil {
-		return nil, fmt.Errorf("打开Excel失败: %w", err)
+		return nil, fmt.Errorf("打开订单文件失败: %w", err)
 	}
 	defer f.Close()
 
 	rows, err := f.GetRows(f.GetSheetList()[0])
 	if err != nil {
-		return nil, fmt.Errorf("读取sheet失败: %w", err)
+		return nil, fmt.Errorf("读取订单Sheet失败: %w", err)
 	}
 	if len(rows) < 2 {
-		return nil, fmt.Errorf("数据行不足")
+		return nil, fmt.Errorf("订单数据行不足")
 	}
 
 	headers := rows[0]
 
-	specCol := findColumn(headers, "商品规格")
-	codeCol := findColumn(headers, "商品商家编码")
-	if specCol < 0 {
+	// 找列
+	colProductID := findColumn(headers, "商品id")
+	colSpec := findColumn(headers, "商品规格")
+	if colProductID < 0 {
+		return nil, fmt.Errorf("未找到「商品id」列")
+	}
+	if colSpec < 0 {
 		return nil, fmt.Errorf("未找到「商品规格」列")
 	}
 
@@ -163,26 +344,38 @@ func ProcessWithConfig(filename string, cfg *Config) (*Result, error) {
 		Total:       len(rows) - 1,
 	}
 
+	// 逐行处理
 	for i := 1; i < len(rows); i++ {
 		row := rows[i]
 
-		// codeFilter 检查
-		code := ""
-		if codeCol >= 0 && codeCol < len(row) {
-			code = strings.TrimSpace(row[codeCol])
+		// 读取商品ID（使用 GetCellValue 避免精度问题）
+		productIDCell, _ := excelize.CoordinatesToCellName(colProductID+1, i+1)
+		productID := strings.TrimSpace(getCellValueSafe(f, f.GetSheetList()[0], productIDCell))
+		if productID == "" && colProductID < len(row) {
+			productID = strings.TrimSpace(row[colProductID])
 		}
-		if cfg.CodeFilter != "" && !strings.Contains(code, cfg.CodeFilter) {
-			result.Unassigned = append(result.Unassigned, row)
+
+		// 读取商品规格
+		spec := ""
+		if colSpec < len(row) {
+			spec = strings.TrimSpace(row[colSpec])
+		}
+
+		// 解析规格
+		_, skuName := parseSpec(spec)
+
+		// 查找自设编码
+		zisheBianma := engine.LookupZisheBianma(productID, skuName)
+		if zisheBianma == "" {
+			// 无匹配自设编码
+			result.NoCodeMatch = append(result.NoCodeMatch, row)
 			continue
 		}
 
-		spec := ""
-		if specCol < len(row) {
-			spec = strings.TrimSpace(row[specCol])
-		}
-
-		stall := classifyStall(spec, cfg)
-		if stall == "未分配" {
+		// 查找档口
+		stall := engine.FindStall(zisheBianma)
+		if stall == "" {
+			// 有自设编码但无档口匹配
 			result.Unassigned = append(result.Unassigned, row)
 		} else {
 			result.StallOrders[stall] = append(result.StallOrders[stall], row)
@@ -190,10 +383,11 @@ func ProcessWithConfig(filename string, cfg *Config) (*Result, error) {
 	}
 
 	// 统计
-	for _, rule := range cfg.Stalls {
-		result.Summary[rule.Name] = len(result.StallOrders[rule.Name])
+	for _, stall := range engine.Stalls {
+		result.Summary[stall.Name] = len(result.StallOrders[stall.Name])
 	}
-	result.Summary["未分配"] = len(result.Unassigned)
+	result.Summary["无匹配自设编码"] = len(result.NoCodeMatch)
+	result.Summary["未分配档口"] = len(result.Unassigned)
 
 	// 输出
 	absPath, _ := filepath.Abs(filename)
@@ -204,57 +398,67 @@ func ProcessWithConfig(filename string, cfg *Config) (*Result, error) {
 	result.OutputDir = outputDir
 
 	outputPath := filepath.Join(outputDir, "档口分配.xlsx")
-	if err := writeOutput(outputPath, headers, cfg, result); err != nil {
+	if err := writeOutput(outputPath, headers, engine, result); err != nil {
 		return nil, fmt.Errorf("生成输出文件失败: %w", err)
 	}
 
 	return result, nil
 }
 
-// ---- 辅助函数 ----
+// ---- 输出 ----
 
-func findColumn(headers []string, name string) int {
-	for i, h := range headers {
-		if strings.TrimSpace(h) == name {
-			return i
-		}
-	}
-	return -1
-}
-
-func writeOutput(outputPath string, headers []string, cfg *Config, result *Result) error {
+func writeOutput(outputPath string, headers []string, engine *Engine, result *Result) error {
 	f := excelize.NewFile()
 	defer f.Close()
 
 	firstSheet := true
 
-	// 按配置顺序写档口 sheet
-	for _, rule := range cfg.Stalls {
-		orders, ok := result.StallOrders[rule.Name]
+	// 按档口优先级顺序写 sheet
+	for _, stall := range engine.Stalls {
+		orders, ok := result.StallOrders[stall.Name]
 		if !ok || len(orders) == 0 {
 			continue
 		}
 		if firstSheet {
-			f.SetSheetName("Sheet1", rule.Name)
-			writeSheet(f, rule.Name, headers, orders)
+			f.SetSheetName("Sheet1", stall.Name)
+			writeSheet(f, stall.Name, headers, orders)
 			firstSheet = false
 		} else {
-			f.NewSheet(rule.Name)
-			writeSheet(f, rule.Name, headers, orders)
+			if _, err := f.NewSheet(stall.Name); err != nil {
+				return err
+			}
+			writeSheet(f, stall.Name, headers, orders)
 		}
 	}
 
-	// 未分配
+	// 未分配档口
 	if len(result.Unassigned) > 0 {
 		if firstSheet {
-			f.SetSheetName("Sheet1", "未分配")
-			writeSheet(f, "未分配", headers, result.Unassigned)
+			f.SetSheetName("Sheet1", "未分配档口")
+			writeSheet(f, "未分配档口", headers, result.Unassigned)
+			firstSheet = false
 		} else {
-			f.NewSheet("未分配")
-			writeSheet(f, "未分配", headers, result.Unassigned)
+			if _, err := f.NewSheet("未分配档口"); err != nil {
+				return err
+			}
+			writeSheet(f, "未分配档口", headers, result.Unassigned)
 		}
 	}
 
+	// 无匹配自设编码
+	if len(result.NoCodeMatch) > 0 {
+		if firstSheet {
+			f.SetSheetName("Sheet1", "无匹配自设编码")
+			writeSheet(f, "无匹配自设编码", headers, result.NoCodeMatch)
+		} else {
+			if _, err := f.NewSheet("无匹配自设编码"); err != nil {
+				return err
+			}
+			writeSheet(f, "无匹配自设编码", headers, result.NoCodeMatch)
+		}
+	}
+
+	f.SetActiveSheet(0)
 	return f.SaveAs(outputPath)
 }
 
@@ -268,5 +472,80 @@ func writeSheet(f *excelize.File, name string, headers []string, rows [][]string
 			cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowIdx+2)
 			f.SetCellValue(name, cell, val)
 		}
+	}
+}
+
+// ---- 辅助函数 ----
+
+// findColumn 在表头中查找指定列名的索引
+func findColumn(headers []string, name string) int {
+	for i, h := range headers {
+		if strings.TrimSpace(h) == name {
+			return i
+		}
+	}
+	return -1
+}
+
+// ---- 配置路径持久化 ----
+
+// dangkouConfigName 存储自设编码文件路径的 JSON 文件名
+const dangkouConfigName = "dangkou_config.json"
+
+// ConfigPath 返回配置文件的完整路径（可执行文件同目录）
+func ConfigPath(name string) string {
+	execPath, _ := os.Executable()
+	return filepath.Join(filepath.Dir(execPath), name)
+}
+
+// SaveConfigPath 保存自设编码文件路径到 dangkou_config.json
+func SaveConfigPath(path string) error {
+	data, err := json.MarshalIndent(map[string]string{"path": path}, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(ConfigPath(dangkouConfigName), data, 0644)
+}
+
+// LoadConfigPath 从 dangkou_config.json 加载自设编码文件路径。
+// 返回空字符串表示未找到已保存的路径。
+func LoadConfigPath() string {
+	path, err := loadConfigPath()
+	if err != nil {
+		return ""
+	}
+	return path
+}
+
+// loadConfigPath 从 dangkou_config.json 加载自设编码文件路径
+func loadConfigPath() (string, error) {
+	for _, p := range configSearchPaths(dangkouConfigName) {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var cfg struct {
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			continue
+		}
+		if cfg.Path != "" {
+			// 验证文件是否存在
+			if _, err := os.Stat(cfg.Path); err == nil {
+				return cfg.Path, nil
+			}
+			// 文件不存在，继续尝试其他搜索路径
+		}
+	}
+	return "", fmt.Errorf("未找到已保存的自设编码文件路径")
+}
+
+func configSearchPaths(name string) []string {
+	execPath, _ := os.Executable()
+	execDir := filepath.Dir(execPath)
+	return []string{
+		filepath.Join(execDir, name),
+		name,
 	}
 }

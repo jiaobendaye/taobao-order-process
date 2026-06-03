@@ -75,10 +75,14 @@ func runCLI() {
 
 	case "dangkou":
 		if len(os.Args) < 3 {
-			fmt.Println("用法: phonecase-tools dangkou <Excel文件>")
+			fmt.Println("用法: phonecase-tools dangkou <订单Excel文件> [自设编码.xlsx]")
 			os.Exit(1)
 		}
-		result, err := dangkou.Process(os.Args[2])
+		configPath := ""
+		if len(os.Args) >= 4 {
+			configPath = os.Args[3]
+		}
+		result, err := dangkou.Process(os.Args[2], configPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 			os.Exit(1)
@@ -86,11 +90,8 @@ func runCLI() {
 		fmt.Printf("已生成 %s/档口分配.xlsx\n", result.OutputDir)
 		fmt.Println()
 		for name, count := range result.Summary {
-			if name != "未分配" {
-				fmt.Printf("  %s: %d条\n", name, count)
-			}
+			fmt.Printf("  %s: %d条\n", name, count)
 		}
-		fmt.Printf("  未分配: %d条\n", result.Summary["未分配"])
 		fmt.Printf("  总计: %d条\n", result.Total)
 
 	case "peijian":
@@ -137,7 +138,7 @@ func runCLI() {
 		fmt.Println("用法:")
 		fmt.Println("  phonecase-tools                       启动桌面应用")
 		fmt.Println("  phonecase-tools filter <Excel文件>    订单筛选")
-		fmt.Println("  phonecase-tools dangkou <Excel文件>   档口分配")
+		fmt.Println("  phonecase-tools dangkou <订单Excel文件> [自设编码.xlsx]   档口分配")
 		fmt.Println("  phonecase-tools peijian extract <Excel文件>  配件提取")
 		fmt.Println("  phonecase-tools peijian merge <pending.xlsx> 配件汇总")
 		os.Exit(1)

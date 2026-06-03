@@ -1,0 +1,66 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: phonecase-tools
+            tags: webkit2_41
+            setup: |
+              sudo apt-get update
+              sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+          - os: windows-latest
+            artifact: phonecase-tools.exe
+            tags: ""
+            setup: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Setup dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: ${{ matrix.setup }}
+
+      - name: Build
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            CGO_ENABLED=1 go build -tags "production,desktop_production" -ldflags="-s -w -H windowsgui" -o ${{ matrix.artifact }} .
+          else
+            go build -tags "${{ matrix.tags }},production,desktop_production" -ldflags="-s -w" -o ${{ matrix.artifact }} .
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: phonecase-tools*
+          merge-multiple: true
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            phonecase-tools
+            phonecase-tools.exe

@@ -107,18 +107,33 @@ async function openConfig(type) {
             '<div class="config-field"><label>列名映射</label>' +
             '<textarea id="cfgColumns" rows="6">' + esc(JSON.stringify(config.columns, null, 2)) + '</textarea></div>';
     } else if (type === 'dangkou') {
-        config = await window.go.main.App.GetDangkouConfig();
-        title = '档口分配配置 (stalls.json)';
-        body = '<div class="config-field"><label>编码过滤 (codeFilter)</label>' +
-            '<input type="text" id="cfgCodeFilter" value="' + esc(config.codeFilter || '') + '">' +
-            '<div class="hint">商品商家编码必须包含此关键词，空=不过滤</div></div>' +
-            '<div class="config-field"><label>档口规则 (stalls)</label>' +
-            '<textarea id="cfgStalls" rows="10">' + esc(JSON.stringify(config.stalls, null, 2)) + '</textarea>' +
-            '<div class="hint">JSON 数组，按顺序匹配。appleModel=true 匹配苹果型号，keywords 匹配规格关键词</div></div>';
+        var configPath = await window.go.main.App.GetDangkouConfigPath();
+        title = '档口分配配置 (自设编码.xlsx)';
+        body = '<div class="config-field"><label>编码文件路径</label>' +
+            '<div style="display:flex;gap:8px">' +
+            '<input type="text" id="cfgDangkouPath" value="' + esc(configPath || '') + '" style="flex:1" readonly>' +
+            '<button class="btn-sm" id="cfgSelectDangkouFile">选择文件</button>' +
+            '</div>' +
+            '<div class="hint">选择包含自设编码映射和档口配置的 Excel 文件</div></div>';
     }
     configTitle.textContent = title;
     configBody.innerHTML = body;
     configPanel.style.display = 'block';
+
+    // 绑定档口配置文件选择按钮
+    if (type === 'dangkou') {
+        setTimeout(function() {
+            var btn = document.getElementById('cfgSelectDangkouFile');
+            if (btn) {
+                btn.addEventListener('click', async function() {
+                    var path = await window.go.main.App.SelectDangkouConfigFile();
+                    if (path) {
+                        document.getElementById('cfgDangkouPath').value = path;
+                    }
+                });
+            }
+        }, 0);
+    }
 }
 
 configSave.addEventListener('click', async function() {
@@ -134,9 +149,13 @@ configSave.addEventListener('click', async function() {
             var cols = JSON.parse(document.getElementById('cfgColumns').value);
             await window.go.main.App.SavePeijianConfig({ parts: { accessories: acc }, columns: cols });
         } else if (currentConfigType === 'dangkou') {
-            var cf = document.getElementById('cfgCodeFilter').value;
-            var ss = JSON.parse(document.getElementById('cfgStalls').value);
-            await window.go.main.App.SaveDangkouConfig({ codeFilter: cf, stalls: ss });
+            var path = document.getElementById('cfgDangkouPath').value.trim();
+            if (!path) {
+                configMsg.textContent = '❌ 请先选择编码文件';
+                configMsg.style.color = 'var(--danger)';
+                return;
+            }
+            await window.go.main.App.SaveDangkouConfigPath(path);
         }
         configMsg.textContent = '✅ 配置已保存';
     } catch (e) {
@@ -205,7 +224,7 @@ async function runDangkou() {
         var html = '';
         var sm = r.summary || {};
         for (var k in sm) {
-            html += card(sm[k], k, k === '未分配');
+            html += card(sm[k], k, k === '未分配档口' || k === '无匹配自设编码');
         }
         resultStats.innerHTML = html;
         result.style.display = 'block';
