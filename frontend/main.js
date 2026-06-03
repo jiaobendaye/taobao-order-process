@@ -78,9 +78,17 @@ function setFile(path) {
 
 // ---- 配置面板 ----
 
-document.getElementById('cfgFilter').addEventListener('click', function() { openConfig('filter'); });
-document.getElementById('cfgPeijian').addEventListener('click', function() { openConfig('peijian'); });
-document.getElementById('cfgDangkou').addEventListener('click', function() { openConfig('dangkou'); });
+function toggleConfig(type) {
+    if (configPanel.style.display === 'block' && currentConfigType === type) {
+        configPanel.style.display = 'none';
+        return;
+    }
+    openConfig(type);
+}
+
+document.getElementById('cfgFilter').addEventListener('click', function() { toggleConfig('filter'); });
+document.getElementById('cfgPeijian').addEventListener('click', function() { toggleConfig('peijian'); });
+document.getElementById('cfgDangkou').addEventListener('click', function() { toggleConfig('dangkou'); });
 configClose.addEventListener('click', function() { configPanel.style.display = 'none'; });
 
 async function openConfig(type) {
