@@ -1,0 +1,17 @@
+{
+  "name": "手机壳订单处理",
+  "outputfilename": "phonecase-tools",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "frontend:dev:serverUrl": "",
+  "author": {
+    "name": "jiaobendaye",
+    "email": ""
+  },
+  "info": {
+    "productName": "手机壳订单处理工具",
+    "productVersion": "1.0.0",
+    "comments": "手机壳订单筛选/配件提取/档口分配工具"
+  }
+}

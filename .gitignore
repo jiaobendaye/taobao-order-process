@@ -1,0 +1,7 @@
+*.xlsx
+data/
+.opencode/
+openspec/
+dist/
+build/
+.claude/

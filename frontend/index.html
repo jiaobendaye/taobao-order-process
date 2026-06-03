@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手机壳订单处理工具</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="app">
+        <header>
+            <h1>📦 手机壳订单处理工具</h1>
+        </header>
+
+        <!-- 文件选择区 -->
+        <section class="dropzone" id="dropzone">
+            <div class="dropzone-content">
+                <div class="drop-icon">📁</div>
+                <p>拖拽 Excel 文件到此处</p>
+                <p class="sub">或</p>
+                <button class="btn-outline" id="selectBtn">选择文件</button>
+                <p class="file-name" id="fileName">未选择文件</p>
+            </div>
+        </section>
+
+        <!-- 工具按钮区 -->
+        <section class="tools">
+            <div class="tool-card">
+                <button class="tool-btn" id="btnFilter" disabled>
+                    <span class="tool-icon">🔍</span>
+                    <span class="tool-name">订单筛选</span>
+                    <span class="tool-desc">多件/疑难/正常/配件分类</span>
+                </button>
+                <button class="cfg-btn" id="cfgFilter" title="配置订单筛选规则">⚙</button>
+            </div>
+            <div class="tool-card">
+                <button class="tool-btn" id="btnPeijian" disabled>
+                    <span class="tool-icon">🔧</span>
+                    <span class="tool-name">配件提取</span>
+                    <span class="tool-desc">提取订单中的配件信息</span>
+                </button>
+                <button class="cfg-btn" id="cfgPeijian" title="配置配件提取规则">⚙</button>
+            </div>
+            <div class="tool-card">
+                <button class="tool-btn" id="btnDangkou" disabled>
+                    <span class="tool-icon">🏪</span>
+                    <span class="tool-name">档口分配</span>
+                    <span class="tool-desc">按型号/关键词分档口</span>
+                </button>
+                <button class="cfg-btn" id="cfgDangkou" title="配置档口分配规则">⚙</button>
+            </div>
+        </section>
+
+        <!-- 配置面板 -->
+        <div class="config-panel" id="configPanel" style="display:none">
+            <div class="config-header">
+                <h3 id="configTitle">配置</h3>
+                <button class="btn-close" id="configClose">✕</button>
+            </div>
+            <div id="configBody"></div>
+            <div class="config-actions">
+                <span class="config-msg" id="configMsg"></span>
+                <button class="btn-save" id="configSave">💾 保存配置</button>
+            </div>
+        </div>
+
+        <!-- 处理中提示 -->
+        <div class="processing" id="processing" style="display:none">
+            <div class="spinner"></div>
+            <span id="processingText">处理中...</span>
+        </div>
+
+        <!-- 结果展示区 -->
+        <section class="result" id="result" style="display:none">
+            <div class="result-header">
+                <h2 id="resultTitle">处理结果</h2>
+                <div class="result-actions">
+                    <button class="btn-merge" id="btnMerge" style="display:none">📊 汇总配件</button>
+                    <button class="btn-open-dir" id="btnOpenDir">📂 打开输出目录</button>
+                </div>
+            </div>
+            <div class="result-stats" id="resultStats"></div>
+        </section>
+    </div>
+
+    <script src="/main.js"></script>
+</body>
+</html>
