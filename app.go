@@ -68,17 +68,21 @@ func (a *App) GetDangkouConfigPath() string {
 	return dangkou.LoadConfigPath()
 }
 
-// SaveDangkouConfigPath 保存自设编码文件路径
+// SaveDangkouConfigPath 保存自设编码文件路径（先校验文件格式）
 func (a *App) SaveDangkouConfigPath(path string) error {
 	if path == "" {
 		return fmt.Errorf("编码文件路径不能为空")
+	}
+	// 校验文件格式是否正确
+	if _, err := dangkou.LoadEngine(path); err != nil {
+		return fmt.Errorf("编码文件格式错误: %w", err)
 	}
 	logger.Info("保存档口配置路径: %s", path)
 	return dangkou.SaveConfigPath(path)
 }
 
-// SelectDangkouConfigFile 打开文件选择对话框选择自设编码.xlsx
-func (a *App) SelectDangkouConfigFile() string {
+// SelectDangkouConfigFile 打开文件选择对话框选择自设编码.xlsx，校验通过后自动保存
+func (a *App) SelectDangkouConfigFile() (string, error) {
 	path, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
 		Title: "选择自设编码 Excel 文件",
 		Filters: []wailsRuntime.FileFilter{
@@ -86,14 +90,14 @@ func (a *App) SelectDangkouConfigFile() string {
 			{DisplayName: "所有文件 (*.*)", Pattern: "*.*"},
 		},
 	})
-	if err != nil {
-		return ""
+	if err != nil || path == "" {
+		return "", nil // 用户取消选择，不报错
 	}
-	// 自动保存选中路径
-	if path != "" {
-		dangkou.SaveConfigPath(path)
+	// 校验格式并保存
+	if err := a.SaveDangkouConfigPath(path); err != nil {
+		return "", err
 	}
-	return path
+	return path, nil
 }
 
 // PeijianConfig 配件配置组合

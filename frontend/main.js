@@ -127,6 +127,7 @@ async function openConfig(type) {
     configTitle.textContent = title;
     configBody.innerHTML = body;
     configPanel.style.display = 'block';
+    configSave.style.display = (type === 'dangkou') ? 'none' : '';
 
     // 绑定档口配置文件选择按钮
     if (type === 'dangkou') {
@@ -134,9 +135,16 @@ async function openConfig(type) {
             var btn = document.getElementById('cfgSelectDangkouFile');
             if (btn) {
                 btn.addEventListener('click', async function() {
-                    var path = await window.go.main.App.SelectDangkouConfigFile();
-                    if (path) {
-                        document.getElementById('cfgDangkouPath').value = path;
+                    try {
+                        var path = await window.go.main.App.SelectDangkouConfigFile();
+                        if (path) {
+                            document.getElementById('cfgDangkouPath').value = path;
+                            configMsg.textContent = '✅ 已保存';
+                            configMsg.style.color = '';
+                        }
+                    } catch (e) {
+                        configMsg.textContent = '❌ ' + (e.message || e || '文件格式错误');
+                        configMsg.style.color = 'var(--danger)';
                     }
                 });
             }
