@@ -28,6 +28,21 @@ windows:
 dev:
 	$(WAILS) dev -tags webkit2_41
 
+# macOS（需在 Mac 上构建）
+#   make macos         → 当前架构（ARM Mac 编译 ARM，Intel Mac 编译 Intel）
+#   make macos-intel   → 强制编译 Intel(x86_64) 包（可在 ARM Mac 上交叉编译）
+macos:
+	@uname -s | grep -q Darwin || { echo "错误: macOS 构建必须在 Mac 上运行"; exit 1; }
+	@echo "=== 构建 macOS（当前架构）==="
+	$(WAILS) build -o "$(OUT_DIR)/$(APP_NAME)-$(shell uname -m)" -ldflags="-s -w"
+	@echo "完成: $(OUT_DIR)/$(APP_NAME)-$(shell uname -m)"
+
+macos-intel:
+	@uname -s | grep -q Darwin || { echo "错误: macOS 构建必须在 Mac 上运行"; exit 1; }
+	@echo "=== 构建 macOS（Intel x86_64）==="
+	$(WAILS) build -platform darwin/amd64 -o "$(OUT_DIR)/$(APP_NAME)-x86_64" -ldflags="-s -w"
+	@echo "完成: $(OUT_DIR)/$(APP_NAME)-x86_64"
+
 # 清理
 clean:
 	rm -rf $(OUT_DIR)
