@@ -21,7 +21,7 @@ linux:
 # Windows
 windows:
 	@echo "=== 构建 Windows ==="
-	$(WAILS) build -platform windows/amd64 -ldflags="-s -w -H windowsgui"
+	$(WAILS) build -platform windows/amd64 -webview2 embed -ldflags="-s -w -H windowsgui"
 	@echo "完成: $(OUT_DIR)/$(APP_NAME).exe"
 
 # 开发模式
