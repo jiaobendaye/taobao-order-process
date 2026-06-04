@@ -178,7 +178,7 @@ func SaveColumnConfig(cfg *ColumnConfig) error {
 
 func findCol(headers []string, name string) int {
 	for i, h := range headers {
-		if strings.TrimSpace(h) == name {
+		if strings.EqualFold(strings.TrimSpace(h), name) {
 			return i
 		}
 	}
@@ -267,7 +267,7 @@ func hasPotentialAccessory(o Order) bool {
 	}
 	if strings.Contains(right, "单独") {
 		for _, kw := range accKeywords {
-			if strings.Contains(right, kw) && !isFalseAccessory(right) {
+			if strings.Contains(strings.ToLower(right), strings.ToLower(kw)) && !isFalseAccessory(right) {
 				return true
 			}
 		}
@@ -277,14 +277,14 @@ func hasPotentialAccessory(o Order) bool {
 			inside := right[idx1+1 : idx1+idx2]
 			if !isFalseAccessory(inside) {
 				for _, kw := range accKeywords {
-					if strings.Contains(inside, kw) {
+					if strings.Contains(strings.ToLower(inside), strings.ToLower(kw)) {
 						return true
 					}
 				}
 			}
 		}
 	}
-	if strings.Contains(o.Spec, "DIY") || strings.Contains(o.Spec, "搭配") {
+	if strings.Contains(strings.ToLower(o.Spec), "diy") || strings.Contains(o.Spec, "搭配") {
 		return true
 	}
 	return false
@@ -334,7 +334,7 @@ func matchPart(seg string, cfg *PartsConfig) (name, color string, matched bool) 
 		return "", "", false
 	}
 	for _, partName := range cfg.Accessories {
-		if strings.HasSuffix(seg, partName) {
+		if strings.HasSuffix(strings.ToLower(seg), strings.ToLower(partName)) {
 			color := strings.TrimSpace(strings.TrimSuffix(seg, partName))
 			if color == "" {
 				color = "无"

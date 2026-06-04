@@ -132,7 +132,7 @@ func loadMapping(f *excelize.File, sheetName string) (map[string]string, error) 
 			continue
 		}
 
-		key := productID + "|" + skuName
+		key := strings.ToLower(productID + "|" + skuName)
 		mapping[key] = code
 	}
 
@@ -165,7 +165,7 @@ func loadStallConfigs(f *excelize.File, sheetNames []string) ([]StallConfig, err
 		codes := make(map[string][]string)
 
 		for col, code := range headerRow {
-			code = strings.TrimSpace(code)
+			code = strings.ToLower(strings.TrimSpace(code))
 			if code == "" {
 				continue
 			}
@@ -269,7 +269,7 @@ func parseSpec(spec string) (model, skuName string) {
 // LookupZisheBianma 根据商品ID和SKU名称查找自设编码。
 // 返回空字符串表示未找到。
 func (e *Engine) LookupZisheBianma(productID, skuName string) string {
-	key := productID + "|" + skuName
+	key := strings.ToLower(productID + "|" + skuName)
 	return e.mapping[key]
 }
 
@@ -277,7 +277,7 @@ func (e *Engine) LookupZisheBianma(productID, skuName string) string {
 // 返回档口名称；若所有档口均不匹配则返回空字符串。
 func (e *Engine) FindStall(zisheBianma string) string {
 	for _, stall := range e.Stalls {
-		if _, ok := stall.Codes[zisheBianma]; ok {
+		if _, ok := stall.Codes[strings.ToLower(zisheBianma)]; ok {
 			return stall.Name
 		}
 	}
@@ -474,7 +474,7 @@ func writeSheet(f *excelize.File, name string, headers []string, rows [][]string
 // findColumn 在表头中查找指定列名的索引
 func findColumn(headers []string, name string) int {
 	for i, h := range headers {
-		if strings.TrimSpace(h) == name {
+		if strings.EqualFold(strings.TrimSpace(h), name) {
 			return i
 		}
 	}

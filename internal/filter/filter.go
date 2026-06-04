@@ -199,7 +199,7 @@ func isAccessoryOnly(row *RowData, cfg *Config) bool {
 		return false
 	}
 	for _, kw := range cfg.AccessoryKeywords {
-		if strings.Contains(row.Spec, kw) {
+		if strings.Contains(strings.ToLower(row.Spec), strings.ToLower(kw)) {
 			return true
 		}
 	}
@@ -292,8 +292,11 @@ func readExcel(filename string) ([]RowData, error) {
 
 	mapper := newFieldMapper(&RowData{})
 	for colIdx, header := range rows[0] {
-		if fieldIdx, ok := mapper.headerToFieldIdx[header]; ok {
-			mapper.colToFieldIdx[colIdx] = fieldIdx
+		for tag, fieldIdx := range mapper.headerToFieldIdx {
+			if strings.EqualFold(strings.TrimSpace(header), tag) {
+				mapper.colToFieldIdx[colIdx] = fieldIdx
+				break
+			}
 		}
 	}
 
