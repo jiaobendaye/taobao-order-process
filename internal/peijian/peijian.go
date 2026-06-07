@@ -316,15 +316,6 @@ func normalizeSegment(seg string) string {
 			break
 		}
 	}
-	for {
-		start := strings.LastIndex(seg, "【")
-		end := strings.LastIndex(seg, "】")
-		if start >= 0 && end > start && end == len(seg)-1 {
-			seg = strings.TrimSpace(seg[:start])
-		} else {
-			break
-		}
-	}
 	return seg
 }
 

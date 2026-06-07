@@ -65,6 +65,11 @@ func TestFindStall_ModelMatching(t *testing.T) {
 		{"A001", "UnknownModel", ""},           // 型号不在任何档口的列表中
 		{"A001", "", "档口A"},                  // model 为空时，匹配第一个有该编码的档口
 		{"B999", "iPhone15Pro", ""},            // 编码不存在
+		// 大小写不敏感
+		{"a001", "iphone15pro", "档口A"},       // 编码和型号全小写
+		{"A001", "IPHONE15PRO", "档口A"},       // 型号全大写
+		{"a001", "SamsungS24Ultra", "档口B"},   // 编码小写
+		{"A001", "pixel8", "档口B"},            // 型号小写
 	}
 
 	for _, tt := range tests {
@@ -124,6 +129,12 @@ func TestFindStall_ModelMatching_Fixed(t *testing.T) {
 		// 型号带空格：parseSpec 去掉空格后正确匹配
 		{productID: "12345", spec: " iPhone   15  Pro |透明壳", wantStall: "档口A"},
 		{productID: "12345", spec: "Samsung S24 Ultra|透明壳[黑色]", wantStall: "档口B"},
+		// 大小写不敏感
+		{productID: "12345", spec: "iphone15pro|透明壳", wantStall: "档口A"},
+		{productID: "12345", spec: "IPHONE15PROMAX|透明壳", wantStall: "档口A"},
+		{productID: "12345", spec: "pixel8|透明壳[蓝色]", wantStall: "档口B"},
+		// 混合：空格 + 大小写
+		{productID: "12345", spec: " Iphone  15  Pro |透明壳", wantStall: "档口A"},
 		{productID: "12345", spec: "UnknownModel|透明壳", wantStall: ""}, // 无档口匹配
 	}
 

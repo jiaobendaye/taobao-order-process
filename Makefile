@@ -15,7 +15,7 @@ cli:
 # Linux
 linux:
 	@echo "=== 构建 Linux ==="
-	$(WAILS) build -tags webkit2_41 -ldflags="-s -w"
+	$(WAILS) build -platform linux/amd64 -tags webkit2_41 -ldflags="-s -w"
 	@echo "完成: $(OUT_DIR)/$(APP_NAME)"
 
 # Windows
