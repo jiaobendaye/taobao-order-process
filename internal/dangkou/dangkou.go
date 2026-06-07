@@ -176,13 +176,14 @@ func loadStallConfigs(f *excelize.File, sheetNames []string) ([]StallConfig, err
 				if col >= len(rows[j]) {
 					continue
 				}
-				m := strings.TrimSpace(rows[j][col])
-				if m == "" {
+				model := strings.TrimSpace(rows[j][col])
+				if model == "" {
 					continue
 				}
-				m = stripInvisible(m)
-				if m != "" {
-					models = append(models, m)
+				model = stripInvisible(model)
+				model = strings.ReplaceAll(model, " ", "")
+				if model != "" {
+					models = append(models, model)
 				}
 			}
 			codes[code] = models
@@ -255,11 +256,11 @@ func stripInvisible(s string) string {
 func parseSpec(spec string) (model, skuName string) {
 	spec = strings.TrimSpace(spec)
 	if idx := strings.Index(spec, "|"); idx >= 0 {
-		model = strings.TrimSpace(spec[:idx])
+		model = strings.ReplaceAll(strings.TrimSpace(spec[:idx]), " ", "")
 		skuName = StripBracketSuffix(spec[idx+1:])
 	} else {
-		model = spec
-		skuName = ""
+		model = ""
+		skuName = StripBracketSuffix(spec)
 	}
 	return
 }
@@ -273,12 +274,24 @@ func (e *Engine) LookupZisheBianma(productID, skuName string) string {
 	return e.mapping[key]
 }
 
-// FindStall 按档口优先级查找匹配该自设编码的档口。
+// FindStall 按档口优先级查找匹配该自设编码和型号的档口。
+// model 为空时跳过型号检查。
 // 返回档口名称；若所有档口均不匹配则返回空字符串。
-func (e *Engine) FindStall(zisheBianma string) string {
+func (e *Engine) FindStall(zisheBianma, model string) string {
+	lowerCode := strings.ToLower(zisheBianma)
+	lowerModel := strings.ToLower(model)
 	for _, stall := range e.Stalls {
-		if _, ok := stall.Codes[strings.ToLower(zisheBianma)]; ok {
+		models, ok := stall.Codes[lowerCode]
+		if !ok {
+			continue
+		}
+		if model == "" {
 			return stall.Name
+		}
+		for _, m := range models {
+			if strings.EqualFold(m, lowerModel) {
+				return stall.Name
+			}
 		}
 	}
 	return ""
@@ -356,7 +369,7 @@ func Process(filename, configPath string) (*Result, error) {
 		}
 
 		// 解析规格
-		_, skuName := parseSpec(spec)
+		model, skuName := parseSpec(spec)
 
 		// 查找自设编码
 		zisheBianma := engine.LookupZisheBianma(productID, skuName)
@@ -366,8 +379,8 @@ func Process(filename, configPath string) (*Result, error) {
 			continue
 		}
 
-		// 查找档口
-		stall := engine.FindStall(zisheBianma)
+		// 查找档口（按自设编码 + 型号匹配）
+		stall := engine.FindStall(zisheBianma, model)
 		if stall == "" {
 			// 有自设编码但无档口匹配
 			result.Unassigned = append(result.Unassigned, row)
