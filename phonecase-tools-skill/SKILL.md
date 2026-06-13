@@ -46,15 +46,15 @@ A complete order processing workflow follows this sequence:
 phonecase-tools filter <Excel文件路径>
 ```
 
-**Input**: 订单 Excel file. Required columns: `店铺名称`, `订单编号`, `子订单编号`, `快递单号`, `买家留言`, `卖家备注`, `商品商家编码`, `商品规格`, `商品数量`
+**Input**: 订单 Excel file. Required columns: `店铺名称`, `订单编号`, `子订单编号`, `付款时间`, `买家留言`, `卖家备注`, `商品商家编码`, `商品规格`, `商品数量`
 
 **Output**: `<原文件名>_output/筛选结果.xlsx` with 4 sheets:
 | Sheet | 内容 |
 |-------|------|
-| 多件订单 | SubOrderID ≠ OrderID，按 OrderID 排序 |
-| 疑难单 | 有买家留言/卖家备注/含疑难关键词，按编码排序 |
-| 单独配件 | 规格含配件关键词且不含 `+`，按编码排序 |
-| 正常手机壳 | 其余订单，按编码分组（不同编码间空行隔开） |
+| 多件订单 | SubOrderID ≠ OrderID，按 OrderID 排序，同订单按付款时间排序 |
+| 疑难单 | 有买家留言/卖家备注/含疑难关键词，按编码再按付款时间排序 |
+| 单独配件 | 规格含配件关键词且不含 `+`，按编码再按付款时间排序 |
+| 正常手机壳 | 其余订单，按编码分组（不同编码间空行隔开），同编码按付款时间排序 |
 
 **CLI output example**:
 ```

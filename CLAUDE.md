@@ -100,6 +100,7 @@ phonecase-tools peijian merge <pending.xlsx>
 - 分类优先级：多件订单 > 疑难单 > 单独配件 > 正常手机壳
 - 多件订单判断：`SubOrderID != "" && OrderID != "" && SubOrderID != OrderID`
 - 输入 Excel 的表头通过反射 + `xlsx` tag 映射到 `RowData` 结构体（大小写不敏感匹配）
+- 排序优先级：原有排序键 > 付款时间（多件按订单编号，其余按商家编码）
 - 配置从 `keywords.json` 加载，保存到可执行文件同目录
 - 输出 Excel 包含 4 个 Sheet，正常手机壳按编码分组（不同编码之间空行隔开）
 

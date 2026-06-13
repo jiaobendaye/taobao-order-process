@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"taobao/internal/logger"
 	"unicode/utf8"
 
 	"github.com/xuri/excelize/v2"
@@ -316,7 +315,7 @@ func Process(filename, configPath string) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	logger.Info("已加载自设编码配置: %v", engine)
+	// logger.Info("已加载自设编码配置: %v", engine)
 
 	// 打开订单文件
 	f, err := excelize.OpenFile(filename)

@@ -99,15 +99,15 @@ func configSearchPaths(name string) []string {
 
 // RowData Excel 中的一行订单数据
 type RowData struct {
-	ShopName   string `xlsx:"店铺名称"`
-	OrderID    string `xlsx:"订单编号"`
-	SubOrderID string `xlsx:"子订单编号"`
-	ExpressNo  string `xlsx:"快递单号"`
-	BuyerMsg   string `xlsx:"买家留言"`
-	SellerNote string `xlsx:"卖家备注"`
-	Code       string `xlsx:"商品商家编码"`
-	Spec       string `xlsx:"商品规格"`
-	Quantity   int    `xlsx:"商品数量"`
+	ShopName    string `xlsx:"店铺名称"`
+	OrderID     string `xlsx:"订单编号"`
+	SubOrderID  string `xlsx:"子订单编号"`
+	PaymentTime string `xlsx:"付款时间"`
+	BuyerMsg    string `xlsx:"买家留言"`
+	SellerNote  string `xlsx:"卖家备注"`
+	Code        string `xlsx:"商品商家编码"`
+	Spec        string `xlsx:"商品规格"`
+	Quantity    int    `xlsx:"商品数量"`
 }
 
 // Result 筛选结果
@@ -238,17 +238,34 @@ func ProcessWithConfig(filename string, cfg *Config) (*Result, error) {
 	}
 
 	// 排序
+	// 排序：先按原有逻辑，再按付款时间
 	sort.Slice(result.MultiOrders, func(i, j int) bool {
-		return result.MultiOrders[i].OrderID < result.MultiOrders[j].OrderID
+		oi, oj := result.MultiOrders[i].OrderID, result.MultiOrders[j].OrderID
+		if oi != oj {
+			return oi < oj
+		}
+		return result.MultiOrders[i].PaymentTime < result.MultiOrders[j].PaymentTime
 	})
 	sort.Slice(result.DoubtfulOrders, func(i, j int) bool {
-		return result.DoubtfulOrders[i].Code < result.DoubtfulOrders[j].Code
+		ci, cj := result.DoubtfulOrders[i].Code, result.DoubtfulOrders[j].Code
+		if ci != cj {
+			return ci < cj
+		}
+		return result.DoubtfulOrders[i].PaymentTime < result.DoubtfulOrders[j].PaymentTime
 	})
 	sort.Slice(result.NormalOrders, func(i, j int) bool {
-		return result.NormalOrders[i].Code < result.NormalOrders[j].Code
+		ci, cj := result.NormalOrders[i].Code, result.NormalOrders[j].Code
+		if ci != cj {
+			return ci < cj
+		}
+		return result.NormalOrders[i].PaymentTime < result.NormalOrders[j].PaymentTime
 	})
 	sort.Slice(result.AccessoryRows, func(i, j int) bool {
-		return result.AccessoryRows[i].Code < result.AccessoryRows[j].Code
+		ci, cj := result.AccessoryRows[i].Code, result.AccessoryRows[j].Code
+		if ci != cj {
+			return ci < cj
+		}
+		return result.AccessoryRows[i].PaymentTime < result.AccessoryRows[j].PaymentTime
 	})
 
 	result.Summary.MultiOrders = len(result.MultiOrders)
@@ -326,7 +343,7 @@ func writeOutput(filename string, result *Result) error {
 }
 
 func writeSheet(f *excelize.File, name string, rows []RowData) {
-	headers := []string{"店铺名称", "订单编号", "子订单编号", "快递单号", "买家留言", "卖家备注", "商品商家编码", "商品规格", "商品数量"}
+	headers := []string{"店铺名称", "订单编号", "子订单编号", "付款时间", "买家留言", "卖家备注", "商品商家编码", "商品规格", "商品数量"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		f.SetCellValue(name, cell, h)
@@ -334,7 +351,7 @@ func writeSheet(f *excelize.File, name string, rows []RowData) {
 
 	for rowIdx, row := range rows {
 		values := []string{
-			row.ShopName, row.OrderID, row.SubOrderID, row.ExpressNo,
+			row.ShopName, row.OrderID, row.SubOrderID, row.PaymentTime,
 			row.BuyerMsg, row.SellerNote, row.Code, row.Spec,
 			fmt.Sprintf("%d", row.Quantity),
 		}
@@ -353,7 +370,7 @@ func createSheet(f *excelize.File, name string, rows []RowData) {
 func createSheetWithGrouping(f *excelize.File, name string, rows []RowData) {
 	f.NewSheet(name)
 
-	headers := []string{"店铺名称", "订单编号", "子订单编号", "快递单号", "买家留言", "卖家备注", "商品商家编码", "商品规格", "商品数量"}
+	headers := []string{"店铺名称", "订单编号", "子订单编号", "付款时间", "买家留言", "卖家备注", "商品商家编码", "商品规格", "商品数量"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		f.SetCellValue(name, cell, h)
@@ -368,7 +385,7 @@ func createSheetWithGrouping(f *excelize.File, name string, rows []RowData) {
 		lastCode = row.Code
 
 		values := []string{
-			row.ShopName, row.OrderID, row.SubOrderID, row.ExpressNo,
+			row.ShopName, row.OrderID, row.SubOrderID, row.PaymentTime,
 			row.BuyerMsg, row.SellerNote, row.Code, row.Spec,
 			fmt.Sprintf("%d", row.Quantity),
 		}
