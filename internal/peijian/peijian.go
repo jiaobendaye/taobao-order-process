@@ -48,20 +48,20 @@ type ColumnConfig struct {
 
 // ExtractResult 提取结果
 type ExtractResult struct {
-	Orders       []Order `json:"-"`
-	SimpleOrders []Order `json:"-"`
-	PendingOrders []Order `json:"-"`
-	NoPartsOrders []Order `json:"-"`
-	OutputDir    string  `json:"outputDir"`
-	Summary      ExtractSummary `json:"summary"`
+	Orders        []Order        `json:"-"`
+	SimpleOrders  []Order        `json:"-"`
+	PendingOrders []Order        `json:"-"`
+	NoPartsOrders []Order        `json:"-"`
+	OutputDir     string         `json:"outputDir"`
+	Summary       ExtractSummary `json:"summary"`
 }
 
 // ExtractSummary 提取统计
 type ExtractSummary struct {
-	Total       int `json:"total"`
-	Simple      int `json:"simple"`
-	Pending     int `json:"pending"`
-	NoParts     int `json:"noParts"`
+	Total   int `json:"total"`
+	Simple  int `json:"simple"`
+	Pending int `json:"pending"`
+	NoParts int `json:"noParts"`
 }
 
 // MergeResult 汇总结果
@@ -427,6 +427,9 @@ func Merge(pendingPath string) (*MergeResult, error) {
 	agg := make(map[string]int)
 
 	for _, sheetName := range f.GetSheetList() {
+		if sheetName == "result" {
+			continue
+		}
 		rows, err := f.GetRows(sheetName)
 		if err != nil {
 			continue
