@@ -257,7 +257,6 @@ btnMerge.addEventListener('click', async function() {
         hideProcessing();
         if (!r.success) { showError(r.error); return; }
         resultTitle.textContent = '配件汇总结果';
-        btnMerge.style.display = 'none';
         var html = '';
         var entries = r.entries || [];
         for (var i = 0; i < entries.length; i++) {
