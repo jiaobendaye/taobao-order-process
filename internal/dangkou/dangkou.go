@@ -417,50 +417,69 @@ func writeOutput(outputPath string, headers []string, engine *Engine, result *Re
 	f := excelize.NewFile()
 	defer f.Close()
 
-	firstSheet := true
+	// 找「订单编号」列索引，用于汇总 sheet
+	colOrderID := findColumn(headers, "订单编号")
 
-	// 按档口优先级顺序写 sheet
+	// 收集汇总 sheet 所需数据
+	var summaryStalls []string     // 档口名（列头）
+	var summaryOrderIDs [][]string // 各档口的订单编号列表
+
+	type sheetData struct {
+		name string
+		rows [][]string
+	}
+	var detailSheets []sheetData // 明细 sheet 列表
+
+	// 按档口优先级顺序收集数据
 	for _, stall := range engine.Stalls {
 		orders, ok := result.StallOrders[stall.Name]
 		if !ok || len(orders) == 0 {
 			continue
 		}
-		if firstSheet {
-			f.SetSheetName("Sheet1", stall.Name)
-			writeSheet(f, stall.Name, headers, orders)
-			firstSheet = false
-		} else {
-			if _, err := f.NewSheet(stall.Name); err != nil {
-				return err
-			}
-			writeSheet(f, stall.Name, headers, orders)
-		}
+		detailSheets = append(detailSheets, sheetData{stall.Name, orders})
+		summaryStalls = append(summaryStalls, stall.Name)
+		summaryOrderIDs = append(summaryOrderIDs, extractColumn(orders, colOrderID))
 	}
 
 	// 未分配档口
 	if len(result.Unassigned) > 0 {
-		if firstSheet {
-			f.SetSheetName("Sheet1", "未分配档口")
-			writeSheet(f, "未分配档口", headers, result.Unassigned)
-			firstSheet = false
-		} else {
-			if _, err := f.NewSheet("未分配档口"); err != nil {
-				return err
-			}
-			writeSheet(f, "未分配档口", headers, result.Unassigned)
-		}
+		detailSheets = append(detailSheets, sheetData{"未分配档口", result.Unassigned})
+		summaryStalls = append(summaryStalls, "未分配档口")
+		summaryOrderIDs = append(summaryOrderIDs, extractColumn(result.Unassigned, colOrderID))
 	}
 
 	// 无匹配自设编码
 	if len(result.NoCodeMatch) > 0 {
-		if firstSheet {
-			f.SetSheetName("Sheet1", "无匹配自设编码")
-			writeSheet(f, "无匹配自设编码", headers, result.NoCodeMatch)
-		} else {
-			if _, err := f.NewSheet("无匹配自设编码"); err != nil {
+		detailSheets = append(detailSheets, sheetData{"无匹配自设编码", result.NoCodeMatch})
+		summaryStalls = append(summaryStalls, "无匹配自设编码")
+		summaryOrderIDs = append(summaryOrderIDs, extractColumn(result.NoCodeMatch, colOrderID))
+	}
+
+	// 汇总 sheet 放第一个
+	if len(summaryStalls) > 0 {
+		f.SetSheetName("Sheet1", "汇总")
+		writeSummarySheet(f, "汇总", summaryStalls, summaryOrderIDs)
+		// 各明细 sheet 追加在后面
+		for _, sd := range detailSheets {
+			if _, err := f.NewSheet(sd.name); err != nil {
 				return err
 			}
-			writeSheet(f, "无匹配自设编码", headers, result.NoCodeMatch)
+			writeSheet(f, sd.name, headers, sd.rows)
+		}
+	} else {
+		// 无汇总数据（不应发生），直接写明细
+		firstSheet := true
+		for _, sd := range detailSheets {
+			if firstSheet {
+				f.SetSheetName("Sheet1", sd.name)
+				writeSheet(f, sd.name, headers, sd.rows)
+				firstSheet = false
+			} else {
+				if _, err := f.NewSheet(sd.name); err != nil {
+					return err
+				}
+				writeSheet(f, sd.name, headers, sd.rows)
+			}
 		}
 	}
 
@@ -477,6 +496,39 @@ func writeSheet(f *excelize.File, name string, headers []string, rows [][]string
 		for colIdx, val := range row {
 			cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowIdx+2)
 			f.SetCellValue(name, cell, val)
+		}
+	}
+}
+
+// extractColumn 提取所有行中指定列的值
+func extractColumn(rows [][]string, colIdx int) []string {
+	if colIdx < 0 {
+		return nil
+	}
+	values := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if colIdx < len(row) {
+			values = append(values, row[colIdx])
+		} else {
+			values = append(values, "")
+		}
+	}
+	return values
+}
+
+// writeSummarySheet 写汇总 sheet：第一行为档口名（列头），下方为各列对应的订单编号
+func writeSummarySheet(f *excelize.File, sheetName string, stallNames []string, orderIDLists [][]string) {
+	// 写列头（档口名）
+	for colIdx, stallName := range stallNames {
+		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
+		f.SetCellValue(sheetName, cell, stallName)
+	}
+
+	// 每列下方写订单编号
+	for colIdx, orderIDs := range orderIDLists {
+		for rowIdx, orderID := range orderIDs {
+			cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowIdx+2)
+			f.SetCellValue(sheetName, cell, orderID)
 		}
 	}
 }
