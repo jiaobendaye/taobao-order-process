@@ -328,35 +328,22 @@ func TestProcess_EndToEnd(t *testing.T) {
 	t.Logf("Output: %s", result.OutputPath)
 }
 
-func TestProcess_CodeCountMismatch(t *testing.T) {
-	// 创建自定义配置：mapping 有 2 个编码，但只给 1 个 + → 1 个配件
+func TestLoadEngine_CodeCountValidation(t *testing.T) {
+	// 创建编码数 ≠ 配件数的配置，验证 LoadEngine 加载时报错
 	configFile := createTestConfig(t,
 		[]string{"商品ID", "SKU名称", "编码1", "编码2"},
 		[][]string{
-			{"999", "壳+配件A", "CODE_A", "CODE_B"},
+			{"999", "壳+配件A", "CODE_A", "CODE_B"}, // 1个配件但2个编码
 		},
 		[]string{"测试档口"},
 		[]string{"CODE_A"},
 	)
 
-	// 创建订单：只有 1 个配件但映射有 2 个编码
-	orderFile := createTestOrder(t,
-		[]string{"商品id", "商品规格", "商品数量"},
-		[][]string{
-			{"999", "Phone|壳+配件A", "1"},
-		},
-	)
-
-	result, err := Process(orderFile, configFile)
-	if err != nil {
-		t.Fatalf("Process failed: %v", err)
+	_, err := LoadEngine(configFile)
+	if err == nil {
+		t.Fatal("expected LoadEngine to reject config with mismatched code/accessory count")
 	}
-
-	// 编码数(2) ≠ 配件数(1)，应进入 Unassigned
-	if len(result.Unassigned) != 1 {
-		t.Errorf("expected 1 unassigned for code/accessory count mismatch, got %d (noMatch=%d, stalls=%v)",
-			len(result.Unassigned), len(result.NoMatch), result.Summary)
-	}
+	t.Logf("Correctly rejected: %v", err)
 }
 
 // createTestConfig 创建测试用的配件编码 Excel（mapping + 档口分配）

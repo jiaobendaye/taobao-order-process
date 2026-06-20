@@ -155,6 +155,13 @@ func loadPeijianMapping(f *excelize.File, sheetName string) (map[string][]string
 			}
 		}
 
+		// 校验编码个数与配件个数是否一致
+		accessories := extractAccessories(skuName)
+		if len(accessories) != len(codes) {
+			return nil, fmt.Errorf("第%d行 SKU「%s」有 %d 个配件，但编码列有 %d 个编码，数量不一致",
+				i+1, skuName, len(accessories), len(codes))
+		}
+
 		key := strings.ToLower(productID + "|" + skuName)
 		mappingCodes[key] = codes
 
