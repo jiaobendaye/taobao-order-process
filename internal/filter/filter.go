@@ -226,10 +226,10 @@ func ProcessWithConfig(filename string, cfg *Config) (*Result, error) {
 	}
 
 	for _, row := range rows {
-		if isMultiOrder(&row) {
-			result.MultiOrders = append(result.MultiOrders, row)
-		} else if isDoubtful(&row, cfg) {
+		if isDoubtful(&row, cfg) {
 			result.DoubtfulOrders = append(result.DoubtfulOrders, row)
+		} else if isMultiOrder(&row) {
+			result.MultiOrders = append(result.MultiOrders, row)
 		} else if isAccessoryOnly(&row, cfg) {
 			result.AccessoryRows = append(result.AccessoryRows, row)
 		} else {
