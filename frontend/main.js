@@ -2,7 +2,6 @@
 var selectedFile = null;
 var currentOutputDir = null;
 var currentConfigType = null;
-var pendingPath = null;
 
 // DOM
 const dropzone = document.getElementById('dropzone');
@@ -17,7 +16,6 @@ const result = document.getElementById('result');
 const resultTitle = document.getElementById('resultTitle');
 const resultStats = document.getElementById('resultStats');
 const btnOpenDir = document.getElementById('btnOpenDir');
-const btnMerge = document.getElementById('btnMerge');
 const configPanel = document.getElementById('configPanel');
 const configTitle = document.getElementById('configTitle');
 const configBody = document.getElementById('configBody');
@@ -67,7 +65,6 @@ dropzone.addEventListener('drop', function(e) {
 
 function setFile(path) {
     selectedFile = path;
-    pendingPath = null;
     var name = path.split('/').pop() || path.split('\\').pop() || path;
     fileName.textContent = name;
     dropzone.classList.add('has-file');
@@ -107,13 +104,14 @@ async function openConfig(type) {
             '<textarea id="cfgAccessoryKeywords" rows="4">' + esc(JSON.stringify(config.accessoryKeywords, null, 2)) + '</textarea>' +
             '<div class="hint">JSON 数组</div></div>';
     } else if (type === 'peijian') {
-        config = await window.go.main.App.GetPeijianConfig();
-        title = '配件提取配置 (parts.json + columns.json)';
-        body = '<div class="config-field"><label>配件名称列表</label>' +
-            '<textarea id="cfgParts" rows="8">' + esc(JSON.stringify(config.parts.accessories, null, 2)) + '</textarea>' +
-            '<div class="hint">JSON 数组</div></div>' +
-            '<div class="config-field"><label>列名映射</label>' +
-            '<textarea id="cfgColumns" rows="6">' + esc(JSON.stringify(config.columns, null, 2)) + '</textarea></div>';
+        var peijianPath = await window.go.main.App.GetPeijianConfigPath();
+        title = '配件提取配置 (配件编码.xlsx)';
+        body = '<div class="config-field"><label>配件编码文件路径</label>' +
+            '<div style="display:flex;gap:8px">' +
+            '<input type="text" id="cfgPeijianPath" value="' + esc(peijianPath || '') + '" style="flex:1" readonly>' +
+            '<button class="btn-sm" id="cfgSelectPeijianFile">选择文件</button>' +
+            '</div>' +
+            '<div class="hint">选择包含 SKU-自设编码映射和档口配置的 Excel 文件</div></div>';
     } else if (type === 'dangkou') {
         var configPath = await window.go.main.App.GetDangkouConfigPath();
         title = '档口分配配置 (自设编码.xlsx)';
@@ -127,9 +125,9 @@ async function openConfig(type) {
     configTitle.textContent = title;
     configBody.innerHTML = body;
     configPanel.style.display = 'block';
-    configSave.style.display = (type === 'dangkou') ? 'none' : '';
+    configSave.style.display = (type === 'filter') ? '' : 'none';
 
-    // 绑定档口配置文件选择按钮
+    // 绑定文件选择按钮
     if (type === 'dangkou') {
         setTimeout(function() {
             var btn = document.getElementById('cfgSelectDangkouFile');
@@ -139,6 +137,26 @@ async function openConfig(type) {
                         var path = await window.go.main.App.SelectDangkouConfigFile();
                         if (path) {
                             document.getElementById('cfgDangkouPath').value = path;
+                            configMsg.textContent = '✅ 已保存';
+                            configMsg.style.color = '';
+                        }
+                    } catch (e) {
+                        configMsg.textContent = '❌ ' + (e.message || e || '文件格式错误');
+                        configMsg.style.color = 'var(--danger)';
+                    }
+                });
+            }
+        }, 0);
+    }
+    if (type === 'peijian') {
+        setTimeout(function() {
+            var btn = document.getElementById('cfgSelectPeijianFile');
+            if (btn) {
+                btn.addEventListener('click', async function() {
+                    try {
+                        var path = await window.go.main.App.SelectPeijianConfigFile();
+                        if (path) {
+                            document.getElementById('cfgPeijianPath').value = path;
                             configMsg.textContent = '✅ 已保存';
                             configMsg.style.color = '';
                         }
@@ -160,18 +178,6 @@ configSave.addEventListener('click', async function() {
             var dk = JSON.parse(document.getElementById('cfgDoubtKeywords').value);
             var ak = JSON.parse(document.getElementById('cfgAccessoryKeywords').value);
             await window.go.main.App.SaveFilterConfig({ doubtKeywords: dk, accessoryKeywords: ak });
-        } else if (currentConfigType === 'peijian') {
-            var acc = JSON.parse(document.getElementById('cfgParts').value);
-            var cols = JSON.parse(document.getElementById('cfgColumns').value);
-            await window.go.main.App.SavePeijianConfig({ parts: { accessories: acc }, columns: cols });
-        } else if (currentConfigType === 'dangkou') {
-            var path = document.getElementById('cfgDangkouPath').value.trim();
-            if (!path) {
-                configMsg.textContent = '❌ 请先选择编码文件';
-                configMsg.style.color = 'var(--danger)';
-                return;
-            }
-            await window.go.main.App.SaveDangkouConfigPath(path);
         }
         configMsg.textContent = '✅ 配置已保存';
     } catch (e) {
@@ -195,7 +201,6 @@ async function runFilter() {
         if (!r.success) { showError(r.error); return; }
         currentOutputDir = r.outputDir;
         resultTitle.textContent = '订单筛选结果';
-        btnMerge.style.display = 'none';
         var s = r.summary || {};
         resultStats.innerHTML =
             card(s.multiOrders || 0, '多件订单') +
@@ -210,19 +215,17 @@ async function runPeijian() {
     if (!selectedFile) return;
     showProcessing('正在提取配件...');
     try {
-        var r = await window.go.main.App.RunPeijianExtract(selectedFile);
+        var r = await window.go.main.App.RunPeijianProcess(selectedFile);
         hideProcessing();
         if (!r.success) { showError(r.error); return; }
         currentOutputDir = r.outputDir;
-        pendingPath = r.pendingPath;
         resultTitle.textContent = '配件提取结果';
-        btnMerge.style.display = 'inline-block';
-        var s = r.summary || {};
-        resultStats.innerHTML =
-            card(s.total || 0, '总订单') +
-            card(s.simple || 0, '简单订单') +
-            card(s.pending || 0, '待处理') +
-            card(s.noParts || 0, '无配件');
+        var html = '';
+        var sm = r.summary || {};
+        for (var k in sm) {
+            html += card(sm[k], k, k === '未分配档口' || k === '无匹配自设编码');
+        }
+        resultStats.innerHTML = html;
         result.style.display = 'block';
     } catch (e) { hideProcessing(); showError(e.message); }
 }
@@ -236,7 +239,6 @@ async function runDangkou() {
         if (!r.success) { showError(r.error); return; }
         currentOutputDir = r.outputDir;
         resultTitle.textContent = '档口分配结果';
-        btnMerge.style.display = 'none';
         var html = '';
         var sm = r.summary || {};
         for (var k in sm) {
@@ -246,29 +248,6 @@ async function runDangkou() {
         result.style.display = 'block';
     } catch (e) { hideProcessing(); showError(e.message); }
 }
-
-// ---- 配件汇总（第二步）----
-
-btnMerge.addEventListener('click', async function() {
-    if (!pendingPath) return;
-    showProcessing('正在汇总配件...');
-    try {
-        var r = await window.go.main.App.RunPeijianMerge(pendingPath);
-        hideProcessing();
-        if (!r.success) { showError(r.error); return; }
-        resultTitle.textContent = '配件汇总结果';
-        var html = '';
-        var entries = r.entries || [];
-        for (var i = 0; i < entries.length; i++) {
-            html += card(entries[i].qty, entries[i].name + ': ' + entries[i].color);
-        }
-        html += '<div class="stat-card" style="grid-column:1/-1">' +
-            '<div class="stat-num">' + r.totalKinds + '种 / ' + r.totalQty + '件</div>' +
-            '<div class="stat-label">配件种类 / 总数量</div></div>';
-        resultStats.innerHTML = html;
-        result.style.display = 'block';
-    } catch (e) { hideProcessing(); showError(e.message); }
-});
 
 btnOpenDir.addEventListener('click', function() {
     if (currentOutputDir) window.go.main.App.OpenDir(currentOutputDir);
@@ -290,7 +269,6 @@ function hideProcessing() { processing.style.display = 'none'; }
 function showError(msg) {
     result.style.display = 'block';
     resultTitle.textContent = '处理失败';
-    btnMerge.style.display = 'none';
     resultStats.innerHTML = '<div class="stat-card highlight" style="grid-column:1/-1">' +
         '<div class="stat-label" style="color:var(--danger)">' + esc(msg) + '</div></div>';
 }

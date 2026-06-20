@@ -7,14 +7,14 @@
 package dangkou
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/xuri/excelize/v2"
+
+	"taobao/internal/common"
 )
 
 // ---- 类型定义 ----
@@ -88,9 +88,9 @@ func loadMapping(f *excelize.File, sheetName string) (map[string]string, error) 
 
 	// 找列
 	headers := rows[0]
-	colProductID := findColumn(headers, "商品ID")
-	colSKU := findColumn(headers, "SKU名称")
-	colCode := findColumn(headers, "自设编码")
+	colProductID := common.FindColumn(headers, "商品ID")
+	colSKU := common.FindColumn(headers, "SKU名称")
+	colCode := common.FindColumn(headers, "自设编码")
 	if colProductID < 0 {
 		return nil, fmt.Errorf("未找到「商品ID」列")
 	}
@@ -109,7 +109,7 @@ func loadMapping(f *excelize.File, sheetName string) (map[string]string, error) 
 
 		// 商品ID 使用 GetCellValue 读取以避免大数字精度问题
 		productIDCell, _ := excelize.CoordinatesToCellName(colProductID+1, i+1)
-		productID := strings.TrimSpace(getCellValueSafe(f, sheetName, productIDCell))
+		productID := strings.TrimSpace(common.GetCellValueSafe(f, sheetName, productIDCell))
 		if productID == "" {
 			// 回退到 GetRows 的值
 			if colProductID < len(row) {
@@ -179,7 +179,7 @@ func loadStallConfigs(f *excelize.File, sheetNames []string) ([]StallConfig, err
 				if model == "" {
 					continue
 				}
-				model = stripInvisible(model)
+				model = common.StripInvisible(model)
 				model = strings.ReplaceAll(model, " ", "")
 				if model != "" {
 					models = append(models, model)
@@ -196,72 +196,6 @@ func loadStallConfigs(f *excelize.File, sheetNames []string) ([]StallConfig, err
 	}
 
 	return stalls, nil
-}
-
-// getCellValueSafe 安全读取单元格值（处理合并单元格等情况）
-func getCellValueSafe(f *excelize.File, sheet, cell string) string {
-	v, err := f.GetCellValue(sheet, cell)
-	if err != nil {
-		return ""
-	}
-	return v
-}
-
-// ---- 字符串处理 ----
-
-// StripBracketSuffix 去除字符串末尾的 [...] 或 【...】 后缀
-func StripBracketSuffix(s string) string {
-	s = strings.TrimSpace(s)
-	// 去除末尾 [...]
-	for {
-		idx := strings.LastIndex(s, "[")
-		if idx < 0 {
-			break
-		}
-		closeIdx := strings.LastIndex(s, "]")
-		if closeIdx == len(s)-1 && closeIdx > idx {
-			s = strings.TrimSpace(s[:idx])
-		} else {
-			break
-		}
-	}
-	// 去除末尾 【...】
-	for {
-		idx := strings.LastIndex(s, "【")
-		if idx < 0 {
-			break
-		}
-		closeIdx := strings.LastIndex(s, "】")
-		if closeIdx == len(s)-utf8.RuneLen('】') && closeIdx > idx {
-			s = strings.TrimSpace(s[:idx])
-		} else {
-			break
-		}
-	}
-	return s
-}
-
-// stripInvisible 去除字符串两端的不可见字符（BOM、零宽空格等）
-func stripInvisible(s string) string {
-	return strings.TrimFunc(s, func(r rune) bool {
-		// U+FEFF BOM, U+200B ZWSP, U+200C ZWNJ, U+200D ZWJ, U+200E LRM, U+200F RLM
-		return r == 0xFEFF || r == 0x200B || r == 0x200C ||
-			r == 0x200D || r == 0x200E || r == 0x200F
-	})
-}
-
-// parseSpec 解析商品规格，返回 (型号, SKU名称)
-// 商品规格格式: "{Phone Model}|{SKU Name}[{Variant}]"
-func parseSpec(spec string) (model, skuName string) {
-	spec = strings.TrimSpace(spec)
-	if idx := strings.Index(spec, "|"); idx >= 0 {
-		model = strings.ReplaceAll(strings.TrimSpace(spec[:idx]), " ", "")
-		skuName = StripBracketSuffix(spec[idx+1:])
-	} else {
-		model = ""
-		skuName = StripBracketSuffix(spec)
-	}
-	return
 }
 
 // ---- 匹配方法 ----
@@ -303,9 +237,9 @@ func (e *Engine) FindStall(zisheBianma, model string) string {
 func Process(filename, configPath string) (*Result, error) {
 	// 加载配置路径
 	if configPath == "" {
-		path, err := loadConfigPath()
-		if err != nil {
-			return nil, fmt.Errorf("未指定配置文件路径，且无法加载已保存的路径: %w\n请在GUI中先选择自设编码文件，或通过命令行传入: phonecase-tools dangkou <订单文件> <自设编码.xlsx>", err)
+		path := common.LoadConfigPath(dangkouConfigName)
+		if path == "" {
+			return nil, fmt.Errorf("未指定配置文件路径，且无法加载已保存的路径: %w\n请在GUI中先选择自设编码文件，或通过命令行传入: phonecase-tools dangkou <订单文件> <自设编码.xlsx>", fmt.Errorf("配置未找到"))
 		}
 		configPath = path
 	}
@@ -315,7 +249,6 @@ func Process(filename, configPath string) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	// logger.Info("已加载自设编码配置: %v", engine)
 
 	// 打开订单文件
 	f, err := excelize.OpenFile(filename)
@@ -335,8 +268,8 @@ func Process(filename, configPath string) (*Result, error) {
 	headers := rows[0]
 
 	// 找列
-	colProductID := findColumn(headers, "商品id")
-	colSpec := findColumn(headers, "商品规格")
+	colProductID := common.FindColumn(headers, "商品id")
+	colSpec := common.FindColumn(headers, "商品规格")
 	if colProductID < 0 {
 		return nil, fmt.Errorf("未找到「商品id」列")
 	}
@@ -351,12 +284,13 @@ func Process(filename, configPath string) (*Result, error) {
 	}
 
 	// 逐行处理
+	sheetName := f.GetSheetList()[0]
 	for i := 1; i < len(rows); i++ {
 		row := rows[i]
 
 		// 读取商品ID（使用 GetCellValue 避免精度问题）
 		productIDCell, _ := excelize.CoordinatesToCellName(colProductID+1, i+1)
-		productID := strings.TrimSpace(getCellValueSafe(f, f.GetSheetList()[0], productIDCell))
+		productID := strings.TrimSpace(common.GetCellValueSafe(f, sheetName, productIDCell))
 		if productID == "" && colProductID < len(row) {
 			productID = strings.TrimSpace(row[colProductID])
 		}
@@ -368,7 +302,7 @@ func Process(filename, configPath string) (*Result, error) {
 		}
 
 		// 解析规格
-		model, skuName := parseSpec(spec)
+		model, skuName := common.ParseSpec(spec)
 
 		// 查找自设编码
 		zisheBianma := engine.LookupZisheBianma(productID, skuName)
@@ -418,7 +352,7 @@ func writeOutput(outputPath string, headers []string, engine *Engine, result *Re
 	defer f.Close()
 
 	// 找「订单编号」列索引，用于汇总 sheet
-	colOrderID := findColumn(headers, "订单编号")
+	colOrderID := common.FindColumn(headers, "订单编号")
 
 	// 收集汇总 sheet 所需数据
 	var summaryStalls []string     // 档口名（列头）
@@ -533,17 +467,11 @@ func writeSummarySheet(f *excelize.File, sheetName string, stallNames []string, 
 	}
 }
 
-// ---- 辅助函数 ----
+// ---- 向后兼容的导出 ----
 
-// findColumn 在表头中查找指定列名的索引
-func findColumn(headers []string, name string) int {
-	for i, h := range headers {
-		if strings.EqualFold(strings.TrimSpace(h), name) {
-			return i
-		}
-	}
-	return -1
-}
+// StripBracketSuffix 去除字符串末尾的 [...] 或 【...】 后缀
+// Deprecated: 使用 common.StripBracketSuffix
+var StripBracketSuffix = common.StripBracketSuffix
 
 // ---- 配置路径持久化 ----
 
@@ -552,58 +480,16 @@ const dangkouConfigName = "dangkou_config.json"
 
 // ConfigPath 返回配置文件的完整路径（可执行文件同目录）
 func ConfigPath(name string) string {
-	execPath, _ := os.Executable()
-	return filepath.Join(filepath.Dir(execPath), name)
+	return common.ConfigPath(name)
 }
 
 // SaveConfigPath 保存自设编码文件路径到 dangkou_config.json
 func SaveConfigPath(path string) error {
-	data, err := json.MarshalIndent(map[string]string{"path": path}, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(ConfigPath(dangkouConfigName), data, 0644)
+	return common.SaveConfigPath(dangkouConfigName, path)
 }
 
 // LoadConfigPath 从 dangkou_config.json 加载自设编码文件路径。
 // 返回空字符串表示未找到已保存的路径。
 func LoadConfigPath() string {
-	path, err := loadConfigPath()
-	if err != nil {
-		return ""
-	}
-	return path
-}
-
-// loadConfigPath 从 dangkou_config.json 加载自设编码文件路径
-func loadConfigPath() (string, error) {
-	for _, p := range configSearchPaths(dangkouConfigName) {
-		data, err := os.ReadFile(p)
-		if err != nil {
-			continue
-		}
-		var cfg struct {
-			Path string `json:"path"`
-		}
-		if err := json.Unmarshal(data, &cfg); err != nil {
-			continue
-		}
-		if cfg.Path != "" {
-			// 验证文件是否存在
-			if _, err := os.Stat(cfg.Path); err == nil {
-				return cfg.Path, nil
-			}
-			// 文件不存在，继续尝试其他搜索路径
-		}
-	}
-	return "", fmt.Errorf("未找到已保存的自设编码文件路径")
-}
-
-func configSearchPaths(name string) []string {
-	execPath, _ := os.Executable()
-	execDir := filepath.Dir(execPath)
-	return []string{
-		filepath.Join(execDir, name),
-		name,
-	}
+	return common.LoadConfigPath(dangkouConfigName)
 }

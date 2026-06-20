@@ -6,7 +6,7 @@ export function GetDangkouConfigPath():Promise<string>;
 
 export function GetFilterConfig():Promise<main.FilterConfig>;
 
-export function GetPeijianConfig():Promise<main.PeijianConfig>;
+export function GetPeijianConfigPath():Promise<string>;
 
 export function HandleDroppedFile(arg1:string,arg2:string):Promise<string>;
 
@@ -16,16 +16,16 @@ export function RunDangkou(arg1:string):Promise<main.DangkouResult>;
 
 export function RunFilter(arg1:string):Promise<main.FilterResult>;
 
-export function RunPeijianExtract(arg1:string):Promise<main.PeijianExtractResult>;
-
-export function RunPeijianMerge(arg1:string):Promise<main.PeijianMergeResult>;
+export function RunPeijianProcess(arg1:string):Promise<main.PeijianResult>;
 
 export function SaveDangkouConfigPath(arg1:string):Promise<void>;
 
 export function SaveFilterConfig(arg1:main.FilterConfig):Promise<void>;
 
-export function SavePeijianConfig(arg1:main.PeijianConfig):Promise<void>;
+export function SavePeijianConfigPath(arg1:string):Promise<void>;
 
 export function SelectDangkouConfigFile():Promise<string>;
 
 export function SelectFile():Promise<string>;
+
+export function SelectPeijianConfigFile():Promise<string>;

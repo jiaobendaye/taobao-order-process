@@ -3,6 +3,8 @@ package dangkou
 import (
 	"fmt"
 	"testing"
+
+	"taobao/internal/common"
 )
 
 // TestParseSpec_StripsSpaces 验证 parseSpec 对型号去空格的行为
@@ -22,12 +24,12 @@ func TestParseSpec_StripsSpaces(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		model, sku := parseSpec(c.spec)
+		model, sku := common.ParseSpec(c.spec)
 		if model != c.wantModel {
-			t.Errorf("parseSpec(%q) model = %q, want %q", c.spec, model, c.wantModel)
+			t.Errorf("common.ParseSpec(%q) model = %q, want %q", c.spec, model, c.wantModel)
 		}
 		if sku != c.wantSKU {
-			t.Errorf("parseSpec(%q) sku = %q, want %q", c.spec, sku, c.wantSKU)
+			t.Errorf("common.ParseSpec(%q) sku = %q, want %q", c.spec, sku, c.wantSKU)
 		}
 	}
 }
@@ -85,13 +87,13 @@ func TestFindStall_ModelMatching(t *testing.T) {
 //
 // 修复前：
 //
-//	_, skuName := parseSpec(spec)           // ← 型号被丢弃！
+//	_, skuName := common.ParseSpec(spec)           // ← 型号被丢弃！
 //	stall := engine.FindStall(zisheBianma)  // 只用编码匹配
 //	→ SamsungS24Ultra 被错误分配到档口A
 //
 // 修复后：
 //
-//	model, skuName := parseSpec(spec)
+//	model, skuName := common.ParseSpec(spec)
 //	stall := engine.FindStall(zisheBianma, model)  // 编码 + 型号匹配
 //	→ SamsungS24Ultra 正确分配到档口B
 func TestFindStall_ModelMatching_Fixed(t *testing.T) {
@@ -144,7 +146,7 @@ func TestFindStall_ModelMatching_Fixed(t *testing.T) {
 	fmt.Println()
 
 	for _, order := range orders {
-		model, skuName := parseSpec(order.spec)
+		model, skuName := common.ParseSpec(order.spec)
 		zisheBianma := engine.LookupZisheBianma(order.productID, skuName)
 		stall := engine.FindStall(zisheBianma, model)
 

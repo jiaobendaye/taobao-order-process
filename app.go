@@ -100,25 +100,41 @@ func (a *App) SelectDangkouConfigFile() (string, error) {
 	return path, nil
 }
 
-// PeijianConfig 配件配置组合
-type PeijianConfig struct {
-	Parts   peijian.PartsConfig   `json:"parts"`
-	Columns peijian.ColumnConfig `json:"columns"`
+// ---- 配件配置管理 ----
+
+// GetPeijianConfigPath 获取已保存的配件编码文件路径
+func (a *App) GetPeijianConfigPath() string {
+	return peijian.LoadConfigPath()
 }
 
-// GetPeijianConfig 获取当前配件配置
-func (a *App) GetPeijianConfig() PeijianConfig {
-	parts, cols := peijian.LoadConfigs()
-	return PeijianConfig{Parts: *parts, Columns: *cols}
-}
-
-// SavePeijianConfig 保存配件配置
-func (a *App) SavePeijianConfig(cfg PeijianConfig) error {
-	logger.Info("保存配件配置: accessories=%d条", len(cfg.Parts.Accessories))
-	if err := peijian.SavePartsConfig(&cfg.Parts); err != nil {
-		return err
+// SavePeijianConfigPath 保存配件编码文件路径（先校验文件格式）
+func (a *App) SavePeijianConfigPath(path string) error {
+	if path == "" {
+		return fmt.Errorf("配件编码文件路径不能为空")
 	}
-	return peijian.SaveColumnConfig(&cfg.Columns)
+	if _, err := peijian.LoadEngine(path); err != nil {
+		return fmt.Errorf("配件编码文件格式错误: %w", err)
+	}
+	logger.Info("保存配件配置路径: %s", path)
+	return peijian.SaveConfigPath(path)
+}
+
+// SelectPeijianConfigFile 打开文件选择对话框选择配件编码.xlsx，校验通过后自动保存
+func (a *App) SelectPeijianConfigFile() (string, error) {
+	path, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "选择配件编码 Excel 文件",
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "Excel文件 (*.xlsx)", Pattern: "*.xlsx"},
+			{DisplayName: "所有文件 (*.*)", Pattern: "*.*"},
+		},
+	})
+	if err != nil || path == "" {
+		return "", nil
+	}
+	if err := a.SavePeijianConfigPath(path); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 // ---- 处理结果 ----
@@ -140,23 +156,14 @@ type DangkouResult struct {
 	OutputDir string         `json:"outputDir"`
 }
 
-// PeijianExtractResult 配件提取结果
-type PeijianExtractResult struct {
-	Success   bool        `json:"success"`
-	Error     string      `json:"error,omitempty"`
-	Summary   interface{} `json:"summary"`
-	OutputDir string      `json:"outputDir"`
-	PendingPath string    `json:"pendingPath"` // pending.xlsx 路径，供前端链式调用 merge
-}
-
-// PeijianMergeResult 配件汇总结果
-type PeijianMergeResult struct {
-	Success    bool                  `json:"success"`
-	Error      string                `json:"error,omitempty"`
-	Entries    []peijian.MergeEntry  `json:"entries"`
-	TotalKinds int                   `json:"totalKinds"`
-	TotalQty   int                   `json:"totalQty"`
-	OutputPath string                `json:"outputPath"`
+// PeijianResult 配件提取分配结果
+type PeijianResult struct {
+	Success    bool           `json:"success"`
+	Error      string         `json:"error,omitempty"`
+	Summary    map[string]int `json:"summary"`
+	Total      int            `json:"total"`
+	OutputDir  string         `json:"outputDir"`
+	OutputPath string         `json:"outputPath"`
 }
 
 // ---- 工具方法 ----
@@ -200,38 +207,24 @@ func (a *App) RunDangkou(filePath string) DangkouResult {
 	}
 }
 
-// RunPeijianExtract 执行配件提取
-func (a *App) RunPeijianExtract(filePath string) PeijianExtractResult {
+// RunPeijianProcess 执行配件提取与档口分配
+func (a *App) RunPeijianProcess(filePath string) PeijianResult {
 	logger.Info("开始配件提取: %s", filePath)
-	result, err := peijian.Extract(filePath)
+	configPath := a.GetPeijianConfigPath()
+	if configPath == "" {
+		return PeijianResult{Success: false, Error: "请先配置配件编码文件（点击配件提取旁的⚙按钮）"}
+	}
+	result, err := peijian.Process(filePath, configPath)
 	if err != nil {
 		logger.Error("配件提取失败: %v", err)
-		return PeijianExtractResult{Success: false, Error: err.Error()}
+		return PeijianResult{Success: false, Error: err.Error()}
 	}
-	logger.Info("配件提取完成: 总=%d 简单=%d 待处理=%d 无配件=%d",
-		result.Summary.Total, result.Summary.Simple, result.Summary.Pending, result.Summary.NoParts)
-	return PeijianExtractResult{
-		Success:     true,
-		Summary:     result.Summary,
-		OutputDir:   result.OutputDir,
-		PendingPath: filepath.Join(result.OutputDir, "pending.xlsx"),
-	}
-}
-
-// RunPeijianMerge 执行配件汇总（第二步）
-func (a *App) RunPeijianMerge(pendingPath string) PeijianMergeResult {
-	logger.Info("开始配件汇总: %s", pendingPath)
-	result, err := peijian.Merge(pendingPath)
-	if err != nil {
-		logger.Error("配件汇总失败: %v", err)
-		return PeijianMergeResult{Success: false, Error: err.Error()}
-	}
-	logger.Info("配件汇总完成: %d种配件 共%d件", result.TotalKinds, result.TotalQty)
-	return PeijianMergeResult{
+	logger.Info("配件提取完成: %v", result.Summary)
+	return PeijianResult{
 		Success:    true,
-		Entries:    result.Entries,
-		TotalKinds: result.TotalKinds,
-		TotalQty:   result.TotalQty,
+		Summary:    result.Summary,
+		Total:      result.Total,
+		OutputDir:  result.OutputDir,
 		OutputPath: result.OutputPath,
 	}
 }

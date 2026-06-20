@@ -10,8 +10,8 @@ export function GetFilterConfig() {
   return window['go']['main']['App']['GetFilterConfig']();
 }
 
-export function GetPeijianConfig() {
-  return window['go']['main']['App']['GetPeijianConfig']();
+export function GetPeijianConfigPath() {
+  return window['go']['main']['App']['GetPeijianConfigPath']();
 }
 
 export function HandleDroppedFile(arg1, arg2) {
@@ -30,12 +30,8 @@ export function RunFilter(arg1) {
   return window['go']['main']['App']['RunFilter'](arg1);
 }
 
-export function RunPeijianExtract(arg1) {
-  return window['go']['main']['App']['RunPeijianExtract'](arg1);
-}
-
-export function RunPeijianMerge(arg1) {
-  return window['go']['main']['App']['RunPeijianMerge'](arg1);
+export function RunPeijianProcess(arg1) {
+  return window['go']['main']['App']['RunPeijianProcess'](arg1);
 }
 
 export function SaveDangkouConfigPath(arg1) {
@@ -46,8 +42,8 @@ export function SaveFilterConfig(arg1) {
   return window['go']['main']['App']['SaveFilterConfig'](arg1);
 }
 
-export function SavePeijianConfig(arg1) {
-  return window['go']['main']['App']['SavePeijianConfig'](arg1);
+export function SavePeijianConfigPath(arg1) {
+  return window['go']['main']['App']['SavePeijianConfigPath'](arg1);
 }
 
 export function SelectDangkouConfigFile() {
@@ -56,4 +52,8 @@ export function SelectDangkouConfigFile() {
 
 export function SelectFile() {
   return window['go']['main']['App']['SelectFile']();
+}
+
+export function SelectPeijianConfigFile() {
+  return window['go']['main']['App']['SelectPeijianConfigFile']();
 }
