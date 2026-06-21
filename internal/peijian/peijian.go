@@ -43,11 +43,11 @@ type Result struct {
 
 // accessoryRow 一条配件分配记录
 type accessoryRow struct {
-	Row          []string // 原始订单行
-	ProductID    string   // 商品ID
-	Accessory    string   // 配件名称
-	ZisheBianma  string   // 自设编码
-	Stall        string   // 档口名
+	Row         []string // 原始订单行
+	ProductID   string   // 商品ID
+	Accessory   string   // 配件名称
+	ZisheBianma string   // 自设编码
+	Stall       string   // 档口名
 }
 
 // ---- 引擎加载 ----
@@ -442,9 +442,15 @@ func writeOutput(outputPath string, headers []string, engine *Engine, result *Re
 		detailSheets = append(detailSheets, sheetData{name: "无匹配自设编码", rows: result.NoMatch})
 	}
 
-	// 汇总 sheet 放第一位
+	// 汇总 sheet 放第一位（只显示有配件数据的档口）
+	var activeStalls []string
+	for _, sn := range engine.stallOrder {
+		if len(result.StallOrders[sn]) > 0 {
+			activeStalls = append(activeStalls, sn)
+		}
+	}
 	f.SetSheetName("Sheet1", "汇总")
-	writeSummarySheet(f, "汇总", engine.stallOrder, result)
+	writeSummarySheet(f, "汇总", activeStalls, result)
 
 	// 各明细 sheet
 	for _, sd := range detailSheets {
