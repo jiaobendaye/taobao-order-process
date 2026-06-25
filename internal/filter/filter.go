@@ -99,15 +99,19 @@ func configSearchPaths(name string) []string {
 
 // RowData Excel 中的一行订单数据
 type RowData struct {
-	ShopName    string `xlsx:"店铺名称"`
-	OrderID     string `xlsx:"订单编号"`
-	SubOrderID  string `xlsx:"子订单编号"`
-	PaymentTime string `xlsx:"付款时间"`
-	BuyerMsg    string `xlsx:"买家留言"`
-	SellerNote  string `xlsx:"卖家备注"`
-	Code        string `xlsx:"商品商家编码"`
-	Spec        string `xlsx:"商品规格"`
-	Quantity    int    `xlsx:"商品数量"`
+	ShopName        string `xlsx:"店铺名称"`
+	OrderID         string `xlsx:"订单编号"`
+	SubOrderID      string `xlsx:"子订单编号"`
+	BuyerNick       string `xlsx:"买家昵称"`
+	ReceiverName    string `xlsx:"收件人姓名"`
+	ReceiverPhone   string `xlsx:"收件人手机号"`
+	ReceiverAddress string `xlsx:"收件人详细地址"`
+	PaymentTime     string `xlsx:"付款时间"`
+	BuyerMsg        string `xlsx:"买家留言"`
+	SellerNote      string `xlsx:"卖家备注"`
+	Code            string `xlsx:"商品商家编码"`
+	Spec            string `xlsx:"商品规格"`
+	Quantity        int    `xlsx:"商品数量"`
 }
 
 // Result 筛选结果
@@ -182,6 +186,17 @@ func isMultiOrder(row *RowData) bool {
 	return row.SubOrderID != "" && row.OrderID != "" && row.SubOrderID != row.OrderID
 }
 
+// recipientKey 生成收件人复合键（买家昵称 + 三个收件人信息）
+func recipientKey(row *RowData) string {
+	return row.BuyerNick + "|" + row.ReceiverName + "|" + row.ReceiverPhone + "|" + row.ReceiverAddress
+}
+
+// isRecipientMulti 判断该行是否属于收件人信息相同的多件订单组
+func isRecipientMulti(row *RowData, multiCount map[string]int) bool {
+	key := recipientKey(row)
+	return key != "||||" && multiCount[key] > 1
+}
+
 func isDoubtful(row *RowData, cfg *Config) bool {
 	if row.BuyerMsg != "" || row.SellerNote != "" {
 		return true
@@ -225,10 +240,19 @@ func ProcessWithConfig(filename string, cfg *Config) (*Result, error) {
 		Summary: Summary{Total: len(rows)},
 	}
 
+	// 第一遍：统计收件人相同的订单组（买家昵称+收件人姓名+手机号+地址都相同）
+	recipientCount := make(map[string]int)
+	for i := range rows {
+		key := recipientKey(&rows[i])
+		if key != "||||" {
+			recipientCount[key]++
+		}
+	}
+
 	for _, row := range rows {
 		if isDoubtful(&row, cfg) {
 			result.DoubtfulOrders = append(result.DoubtfulOrders, row)
-		} else if isMultiOrder(&row) {
+		} else if isMultiOrder(&row) || isRecipientMulti(&row, recipientCount) {
 			result.MultiOrders = append(result.MultiOrders, row)
 		} else if isAccessoryOnly(&row, cfg) {
 			result.AccessoryRows = append(result.AccessoryRows, row)
@@ -343,7 +367,7 @@ func writeOutput(filename string, result *Result) error {
 }
 
 func writeSheet(f *excelize.File, name string, rows []RowData) {
-	headers := []string{"店铺名称", "订单编号", "子订单编号", "付款时间", "买家留言", "卖家备注", "商品商家编码", "商品规格", "商品数量"}
+	headers := []string{"店铺名称", "订单编号", "子订单编号", "买家昵称", "收件人姓名", "收件人手机号", "收件人详细地址", "付款时间", "买家留言", "卖家备注", "商品商家编码", "商品规格", "商品数量"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		f.SetCellValue(name, cell, h)
@@ -351,8 +375,8 @@ func writeSheet(f *excelize.File, name string, rows []RowData) {
 
 	for rowIdx, row := range rows {
 		values := []string{
-			row.ShopName, row.OrderID, row.SubOrderID, row.PaymentTime,
-			row.BuyerMsg, row.SellerNote, row.Code, row.Spec,
+			row.ShopName, row.OrderID, row.SubOrderID, row.BuyerNick, row.ReceiverName, row.ReceiverPhone, row.ReceiverAddress,
+			row.PaymentTime, row.BuyerMsg, row.SellerNote, row.Code, row.Spec,
 			fmt.Sprintf("%d", row.Quantity),
 		}
 		for colIdx, v := range values {
@@ -370,7 +394,7 @@ func createSheet(f *excelize.File, name string, rows []RowData) {
 func createSheetWithGrouping(f *excelize.File, name string, rows []RowData) {
 	f.NewSheet(name)
 
-	headers := []string{"店铺名称", "订单编号", "子订单编号", "付款时间", "买家留言", "卖家备注", "商品商家编码", "商品规格", "商品数量"}
+	headers := []string{"店铺名称", "订单编号", "子订单编号", "买家昵称", "收件人姓名", "收件人手机号", "收件人详细地址", "付款时间", "买家留言", "卖家备注", "商品商家编码", "商品规格", "商品数量"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		f.SetCellValue(name, cell, h)
@@ -385,8 +409,8 @@ func createSheetWithGrouping(f *excelize.File, name string, rows []RowData) {
 		lastCode = row.Code
 
 		values := []string{
-			row.ShopName, row.OrderID, row.SubOrderID, row.PaymentTime,
-			row.BuyerMsg, row.SellerNote, row.Code, row.Spec,
+			row.ShopName, row.OrderID, row.SubOrderID, row.BuyerNick, row.ReceiverName, row.ReceiverPhone, row.ReceiverAddress,
+			row.PaymentTime, row.BuyerMsg, row.SellerNote, row.Code, row.Spec,
 			fmt.Sprintf("%d", row.Quantity),
 		}
 		for colIdx, v := range values {
