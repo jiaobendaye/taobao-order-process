@@ -5,3 +5,4 @@ openspec/
 dist/
 build/
 .claude/
+.playwright-mcp/

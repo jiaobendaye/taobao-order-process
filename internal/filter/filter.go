@@ -116,10 +116,10 @@ type RowData struct {
 
 // Result 筛选结果
 type Result struct {
-	MultiOrders    []RowData `json:"-"`
-	DoubtfulOrders []RowData `json:"-"`
-	NormalOrders   []RowData `json:"-"`
-	AccessoryRows  []RowData `json:"-"`
+	MultiOrders    []RowData `json:"multiOrders"`
+	DoubtfulOrders []RowData `json:"doubtfulOrders"`
+	NormalOrders   []RowData `json:"normalOrders"`
+	AccessoryRows  []RowData `json:"accessoryRows"`
 	OutputDir      string    `json:"outputDir"`
 	Summary        Summary   `json:"summary"`
 }
@@ -236,6 +236,28 @@ func ProcessWithConfig(filename string, cfg *Config) (*Result, error) {
 		return nil, err
 	}
 
+	result := ProcessData(rows, cfg)
+
+	// 输出到 _output/ 目录
+	absPath, _ := filepath.Abs(filename)
+	excelDir := filepath.Dir(absPath)
+	excelName := strings.TrimSuffix(filepath.Base(absPath), filepath.Ext(absPath))
+	outputDir := filepath.Join(excelDir, excelName+"_output")
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return nil, err
+	}
+	result.OutputDir = outputDir
+
+	if err := writeOutput(filepath.Join(outputDir, "筛选结果.xlsx"), result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// ProcessData 对已解析的订单行数据执行分类逻辑，不涉及文件 I/O。
+// 此函数是纯逻辑，可被桌面/CLI/Wasm 共用。
+func ProcessData(rows []RowData, cfg *Config) *Result {
 	result := &Result{
 		Summary: Summary{Total: len(rows)},
 	}
@@ -262,7 +284,6 @@ func ProcessWithConfig(filename string, cfg *Config) (*Result, error) {
 	}
 
 	// 排序
-	// 排序：先按原有逻辑，再按付款时间
 	sort.Slice(result.MultiOrders, func(i, j int) bool {
 		oi, oj := result.MultiOrders[i].OrderID, result.MultiOrders[j].OrderID
 		if oi != oj {
@@ -297,20 +318,34 @@ func ProcessWithConfig(filename string, cfg *Config) (*Result, error) {
 	result.Summary.NormalOrders = len(result.NormalOrders)
 	result.Summary.AccessoryRows = len(result.AccessoryRows)
 
-	// 输出到 _output/ 目录
-	absPath, _ := filepath.Abs(filename)
-	excelDir := filepath.Dir(absPath)
-	excelName := strings.TrimSuffix(filepath.Base(absPath), filepath.Ext(absPath))
-	outputDir := filepath.Join(excelDir, excelName+"_output")
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return nil, err
-	}
-	result.OutputDir = outputDir
+	return result
+}
 
-	if err := writeOutput(filepath.Join(outputDir, "筛选结果.xlsx"), result); err != nil {
-		return nil, err
+// ParseRows 将 2D 字符串数组（表头+数据行）解析为 []RowData。
+// 此函数替代 readExcel 的解析部分，供 Wasm 调用时使用。
+func ParseRows(rows [][]string) ([]RowData, error) {
+	if len(rows) < 2 {
+		return nil, fmt.Errorf("数据行不足")
 	}
 
+	mapper := newFieldMapper(&RowData{})
+	for colIdx, header := range rows[0] {
+		for tag, fieldIdx := range mapper.headerToFieldIdx {
+			if strings.EqualFold(strings.TrimSpace(header), tag) {
+				mapper.colToFieldIdx[colIdx] = fieldIdx
+				break
+			}
+		}
+	}
+
+	var result []RowData
+	for i := 1; i < len(rows); i++ {
+		row := scanRow(rows[i], mapper)
+		if row.Code == "" {
+			row.Code = "未知"
+		}
+		result = append(result, *row)
+	}
 	return result, nil
 }
 

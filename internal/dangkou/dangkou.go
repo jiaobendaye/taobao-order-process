@@ -21,23 +21,23 @@ import (
 
 // StallConfig 单个档口的配置（从 Excel 的一个 Sheet 读取）
 type StallConfig struct {
-	Name     string              // 档口名称（Sheet 名）
-	Priority int                 // 优先级（0-based Sheet 顺序）
-	Codes    map[string][]string // 自设编码 → 支持的手机型号列表
+	Name     string              `json:"name"`     // 档口名称（Sheet 名）
+	Priority int                 `json:"priority"` // 优先级（0-based Sheet 顺序）
+	Codes    map[string][]string `json:"codes"`    // 自设编码 → 支持的手机型号列表
 }
 
 // Engine 档口匹配引擎
 type Engine struct {
-	mapping map[string]string // "商品ID|SKU名称" → 自设编码
-	Stalls  []StallConfig     // 按优先级排序的档口列表
+	Mapping map[string]string `json:"mapping"` // "商品ID|SKU名称" → 自设编码
+	Stalls  []StallConfig     `json:"stalls"`  // 按优先级排序的档口列表
 }
 
 // Result 档口分配结果
 type Result struct {
-	StallOrders map[string][][]string `json:"-"`       // 档口名 → 订单行列表
-	NoCodeMatch [][]string            `json:"-"`       // 无匹配自设编码的行
-	Unassigned  [][]string            `json:"-"`       // 有自设编码但无档口匹配的行
-	Summary     map[string]int        `json:"summary"` // 档口名 → 数量
+	StallOrders map[string][][]string `json:"stallOrders"` // 档口名 → 订单行列表
+	NoCodeMatch [][]string            `json:"noCodeMatch"` // 无匹配自设编码的行
+	Unassigned  [][]string            `json:"unassigned"`  // 有自设编码但无档口匹配的行
+	Summary     map[string]int        `json:"summary"`     // 档口名 → 数量
 	OutputDir   string                `json:"outputDir"`
 	Total       int                   `json:"total"`
 }
@@ -64,7 +64,7 @@ func LoadEngine(configPath string) (*Engine, error) {
 	if err != nil {
 		return nil, fmt.Errorf("读取自设编码映射失败: %w", err)
 	}
-	engine.mapping = mapping
+	engine.Mapping = mapping
 
 	// 后续 Sheets: 各档口配置
 	stalls, err := loadStallConfigs(f, sheets[1:])
@@ -204,7 +204,7 @@ func loadStallConfigs(f *excelize.File, sheetNames []string) ([]StallConfig, err
 // 返回空字符串表示未找到。
 func (e *Engine) LookupZisheBianma(productID, skuName string) string {
 	key := strings.ToLower(productID + "|" + skuName)
-	return e.mapping[key]
+	return e.Mapping[key]
 }
 
 // FindStall 按档口优先级查找匹配该自设编码和型号的档口。
@@ -257,77 +257,34 @@ func Process(filename, configPath string) (*Result, error) {
 	}
 	defer f.Close()
 
-	rows, err := f.GetRows(f.GetSheetList()[0])
+	allRows, err := f.GetRows(f.GetSheetList()[0])
 	if err != nil {
 		return nil, fmt.Errorf("读取订单Sheet失败: %w", err)
 	}
-	if len(rows) < 2 {
+	if len(allRows) < 2 {
 		return nil, fmt.Errorf("订单数据行不足")
 	}
 
-	headers := rows[0]
+	headers := allRows[0]
+	sheetName := f.GetSheetList()[0]
 
-	// 找列
+	// 找商品ID列用于 GetCellValue 读取
 	colProductID := common.FindColumn(headers, "商品id")
-	colSpec := common.FindColumn(headers, "商品规格")
 	if colProductID < 0 {
 		return nil, fmt.Errorf("未找到「商品id」列")
 	}
-	if colSpec < 0 {
-		return nil, fmt.Errorf("未找到「商品规格」列")
-	}
 
-	result := &Result{
-		StallOrders: make(map[string][][]string),
-		Summary:     make(map[string]int),
-		Total:       len(rows) - 1,
-	}
-
-	// 逐行处理
-	sheetName := f.GetSheetList()[0]
-	for i := 1; i < len(rows); i++ {
-		row := rows[i]
-
-		// 读取商品ID（使用 GetCellValue 避免精度问题）
-		productIDCell, _ := excelize.CoordinatesToCellName(colProductID+1, i+1)
+	// 用 GetCellValue 修正每行的商品ID（避免科学计数法）
+	dataRows := allRows[1:]
+	for i := range dataRows {
+		productIDCell, _ := excelize.CoordinatesToCellName(colProductID+1, i+2) // +2: header + 1-based
 		productID := strings.TrimSpace(common.GetCellValueSafe(f, sheetName, productIDCell))
-		if productID == "" && colProductID < len(row) {
-			productID = strings.TrimSpace(row[colProductID])
-		}
-
-		// 读取商品规格
-		spec := ""
-		if colSpec < len(row) {
-			spec = strings.TrimSpace(row[colSpec])
-		}
-
-		// 解析规格
-		model, skuName := common.ParseSpec(spec)
-
-		// 查找自设编码
-		zisheBianma := engine.LookupZisheBianma(productID, skuName)
-		if zisheBianma == "" {
-			// 无匹配自设编码
-			result.NoCodeMatch = append(result.NoCodeMatch, row)
-			continue
-		}
-
-		// 查找档口（按自设编码 + 型号匹配）
-		stall := engine.FindStall(zisheBianma, model)
-		if stall == "" {
-			// 有自设编码但无档口匹配
-			result.Unassigned = append(result.Unassigned, row)
-		} else {
-			result.StallOrders[stall] = append(result.StallOrders[stall], row)
+		if productID != "" && colProductID < len(dataRows[i]) {
+			dataRows[i][colProductID] = productID
 		}
 	}
 
-	// 统计
-	for _, stall := range engine.Stalls {
-		result.Summary[stall.Name] = len(result.StallOrders[stall.Name])
-	}
-	result.Summary["无匹配自设编码"] = len(result.NoCodeMatch)
-	result.Summary["未分配档口"] = len(result.Unassigned)
+	result := ProcessData(dataRows, headers, engine)
 
 	// 输出
 	absPath, _ := filepath.Abs(filename)
@@ -343,6 +300,55 @@ func Process(filename, configPath string) (*Result, error) {
 	}
 
 	return result, nil
+}
+
+// ProcessData 对已解析的订单数据执行档口分配，不涉及文件 I/O。
+// dataRows: 数据行（不含表头）, headers: 表头行, engine: 已加载的匹配引擎。
+// 此函数是纯逻辑，可被桌面/CLI/Wasm 共用。
+func ProcessData(dataRows [][]string, headers []string, engine *Engine) *Result {
+	colProductID := common.FindColumn(headers, "商品id")
+	colSpec := common.FindColumn(headers, "商品规格")
+
+	result := &Result{
+		StallOrders: make(map[string][][]string),
+		Summary:     make(map[string]int),
+		Total:       len(dataRows),
+	}
+
+	for _, row := range dataRows {
+		productID := ""
+		if colProductID >= 0 && colProductID < len(row) {
+			productID = strings.TrimSpace(row[colProductID])
+		}
+
+		spec := ""
+		if colSpec >= 0 && colSpec < len(row) {
+			spec = strings.TrimSpace(row[colSpec])
+		}
+
+		model, skuName := common.ParseSpec(spec)
+		zisheBianma := engine.LookupZisheBianma(productID, skuName)
+		if zisheBianma == "" {
+			result.NoCodeMatch = append(result.NoCodeMatch, row)
+			continue
+		}
+
+		stall := engine.FindStall(zisheBianma, model)
+		if stall == "" {
+			result.Unassigned = append(result.Unassigned, row)
+		} else {
+			result.StallOrders[stall] = append(result.StallOrders[stall], row)
+		}
+	}
+
+	// 统计
+	for _, stall := range engine.Stalls {
+		result.Summary[stall.Name] = len(result.StallOrders[stall.Name])
+	}
+	result.Summary["无匹配自设编码"] = len(result.NoCodeMatch)
+	result.Summary["未分配档口"] = len(result.Unassigned)
+
+	return result
 }
 
 // ---- 输出 ----

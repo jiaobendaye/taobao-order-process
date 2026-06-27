@@ -99,7 +99,7 @@ func TestFindStall_ModelMatching(t *testing.T) {
 func TestFindStall_ModelMatching_Fixed(t *testing.T) {
 	// ---- 模拟引擎配置 ----
 	engine := &Engine{
-		mapping: map[string]string{
+		Mapping: map[string]string{
 			"12345|透明壳": "A001",
 		},
 		Stalls: []StallConfig{

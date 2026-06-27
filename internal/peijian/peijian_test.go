@@ -74,7 +74,7 @@ func TestLoadEngine_WithTestData(t *testing.T) {
 
 	// 验证 mapping
 	key := toLower("990696037645" + "|" + "奶油蓝+红苹果支架+红色手提绳")
-	codes, ok := engine.mapping[key]
+	codes, ok := engine.Mapping[key]
 	if !ok {
 		t.Fatal("mapping should contain 990696037645")
 	}
@@ -84,7 +84,7 @@ func TestLoadEngine_WithTestData(t *testing.T) {
 
 	// 验证无 + 的 SKU
 	key2 := toLower("904467045024" + "|" + "蓝色蝴蝶结")
-	codes2, ok := engine.mapping[key2]
+	codes2, ok := engine.Mapping[key2]
 	if !ok {
 		t.Fatal("mapping should contain 904467045024")
 	}
@@ -93,17 +93,17 @@ func TestLoadEngine_WithTestData(t *testing.T) {
 	}
 
 	// 验证 stalls
-	if stall := engine.stalls[toLower("HT粘贴支架")]; stall != "鸿腾" {
+	if stall := engine.Stalls[toLower("HT粘贴支架")]; stall != "鸿腾" {
 		t.Errorf("HT粘贴支架 should be in 鸿腾, got %q", stall)
 	}
-	if stall := engine.stalls[toLower("DTY推拉支架")]; stall != "大头鸭" {
+	if stall := engine.Stalls[toLower("DTY推拉支架")]; stall != "大头鸭" {
 		t.Errorf("DTY推拉支架 should be in 大头鸭, got %q", stall)
 	}
 
 	// 验证 stallOrder
 	wantOrder := []string{"大头鸭", "有米", "鸿腾", "水玲珑", "1688"}
-	if !equalStrings(engine.stallOrder, wantOrder) {
-		t.Errorf("stallOrder = %v, want %v", engine.stallOrder, wantOrder)
+	if !equalStrings(engine.StallOrder, wantOrder) {
+		t.Errorf("stallOrder = %v, want %v", engine.StallOrder, wantOrder)
 	}
 }
 

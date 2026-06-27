@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>手机壳订单处理工具</title>
+<style>__CSS__</style>
+</head>
+<body>
+<div class="header">
+  <h1>📱 手机壳订单处理工具</h1>
+  <p>浏览器版本 · 数据完全在本地处理</p>
+</div>
+
+<!-- 共享订单文件上传 -->
+<div id="shared-zone" class="drop-zone">
+  <div class="icon">📂</div>
+  <div class="text">点击选择或拖拽订单 Excel 文件</div>
+  <div class="file-name" id="shared-file-name"></div>
+  <input type="file" accept=".xlsx">
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-panel="filter">🔍 订单筛选</button>
+  <button class="tab" data-panel="peijian">🔧 配件提取</button>
+  <button class="tab" data-panel="dangkou">🏪 档口分配</button>
+</div>
+
+<div class="content">
+  <!-- Filter Panel -->
+  <div id="filter" class="tool-panel active">
+    <div class="config-bar">
+      <button onclick="UI.toggleConfigPanel('filter-config-panel')">⚙ 关键词配置</button>
+      <span style="font-size:.8em;color:#999">筛选规则: 多件订单 → 疑难单 → 单独配件 → 正常手机壳</span>
+    </div>
+    <div id="filter-config-panel" class="config-panel">
+      <h3>🔧 筛选关键词配置</h3>
+      <label style="display:block;margin-bottom:4px;font-size:.9em">疑难关键词（每行一个）:</label>
+      <textarea id="filter-doubt-kw" placeholder="其他&#10;咨询客服&#10;备注&#10;diy"></textarea>
+      <label style="display:block;margin:8px 0 4px;font-size:.9em">配件关键词（每行一个）:</label>
+      <textarea id="filter-acc-kw" placeholder="支架&#10;绳&#10;链&#10;吸盘"></textarea>
+      <div class="btn-row">
+        <button class="btn-save" onclick="saveFilterConfig()">保存</button>
+        <button class="btn-cancel" onclick="UI.toggleConfigPanel('filter-config-panel')">取消</button>
+      </div>
+    </div>
+    <button class="btn-process" onclick="runFilter()">开始筛选</button>
+    <div class="spinner"></div>
+    <div class="result-area"></div>
+  </div>
+
+  <!-- Peijian Panel -->
+  <div id="peijian" class="tool-panel">
+    <div class="config-bar">
+      <button onclick="document.getElementById('pj-cfg-file').click()">⚙ 配件编码</button>
+      <span class="config-path" id="peijian-config-path">未配置</span>
+      <input type="file" id="pj-cfg-file" accept=".xlsx" onchange="handlePeijianConfig(this.files[0])">
+    </div>
+    <button class="btn-process" onclick="runPeijian()">开始提取</button>
+    <div class="spinner"></div>
+    <div class="result-area"></div>
+  </div>
+
+  <!-- Dangkou Panel -->
+  <div id="dangkou" class="tool-panel">
+    <div class="config-bar">
+      <button onclick="document.getElementById('dk-cfg-file').click()">⚙ 自设编码</button>
+      <span class="config-path" id="dangkou-config-path">未配置</span>
+      <input type="file" id="dk-cfg-file" accept=".xlsx" onchange="handleDangkouConfig(this.files[0])">
+    </div>
+    <button class="btn-process" onclick="runDangkou()">开始分配</button>
+    <div class="spinner"></div>
+    <div class="result-area"></div>
+  </div>
+</div>
+
+<script>__WASM_EXEC_JS__</script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+<script>__JS__</script>
+<script>
+// Initialization
+(function() {
+  const statusEl = document.createElement('div');
+  statusEl.className = 'status-text';
+  statusEl.textContent = '正在加载处理引擎...';
+  document.querySelector('.content').prepend(statusEl);
+
+  WasmBridge.init('__WASM_DATA_URL__').then(() => {
+    statusEl.textContent = '';
+
+    // Restore filter config
+    const fc = Config.getFilterConfig();
+    document.getElementById('filter-doubt-kw').value = (fc.doubtKeywords || []).join('\n');
+    document.getElementById('filter-acc-kw').value = (fc.accessoryKeywords || []).join('\n');
+
+    // Setup tabs
+    UI.initTab('.tab[data-panel="filter"]', 'filter');
+    UI.initTab('.tab[data-panel="dangkou"]', 'dangkou');
+    UI.initTab('.tab[data-panel="peijian"]', 'peijian');
+
+    // Setup shared drop zone
+    UI.setupDropZone('shared-zone', (f) => {
+      state.orderFile = f;
+      UI.setFileName('shared-zone', f.name);
+    });
+  }).catch(err => {
+    statusEl.textContent = '引擎加载失败: ' + err.message;
+    statusEl.style.color = '#d32f2f';
+  });
+})();
+
+function saveFilterConfig() {
+  const doubt = document.getElementById('filter-doubt-kw').value.split('\n').map(s => s.trim()).filter(Boolean);
+  const acc = document.getElementById('filter-acc-kw').value.split('\n').map(s => s.trim()).filter(Boolean);
+  Config.setFilterConfig({ doubtKeywords: doubt, accessoryKeywords: acc });
+  UI.toggleConfigPanel('filter-config-panel');
+}
+
+async function handleDangkouConfig(file) {
+  if (!file) return;
+  try { await loadDangkouConfig(file); }
+  catch(e) { alert('编码文件加载失败: ' + e.message); }
+}
+async function handlePeijianConfig(file) {
+  if (!file) return;
+  try { await loadPeijianConfig(file); }
+  catch(e) { alert('配件编码文件加载失败: ' + e.message); }
+}
+</script>
+</body>
+</html>

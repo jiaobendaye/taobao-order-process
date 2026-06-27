@@ -1,11 +1,11 @@
-.PHONY: all linux windows clean
+.PHONY: all linux windows clean wasm
 
 APP_NAME  := phonecase-tools
 OUT_DIR   := build/bin
 WAILS     := $(HOME)/go/bin/wails
 
 # 构建所有
-all: linux windows
+all: linux windows wasm
 
 # CLI 已集成到主程序
 cli:
@@ -47,3 +47,11 @@ macos-intel:
 clean:
 	rm -rf $(OUT_DIR)
 	@echo "清理完成"
+
+# WebAssembly 单 HTML 版本
+wasm:
+	@echo "=== 编译 Go → Wasm ==="
+	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o $(OUT_DIR)/phonecase.wasm ./wasm/
+	@echo "Wasm 完成: $(OUT_DIR)/phonecase.wasm"
+	@echo "=== 打包单 HTML ==="
+	bash scripts/build-html.sh
