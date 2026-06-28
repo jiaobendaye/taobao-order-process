@@ -133,7 +133,8 @@ async function runFilter() {
     addSheet('疑难单', data.doubtfulOrders);
     addSheet('单独配件', data.accessoryRows);
     addSheet('正常手机壳', data.normalOrders);
-    UI.showResult('filter', summary, () => Excel.download(sheets, '筛选结果.xlsx'), '📥 下载筛选结果.xlsx');
+    const baseName = state.orderFile.name.replace(/\.xlsx$/i, '');
+    UI.showResult('filter', summary, () => Excel.download(sheets, baseName + '_筛选结果.xlsx'), '📥 下载' + baseName + '_筛选结果.xlsx');
   } catch (e) {
     UI.showError('filter', e.message);
   } finally {
@@ -170,7 +171,8 @@ async function runDangkou() {
     if (data.unassigned && data.unassigned.length) sheets.push({ name: '未分配档口', headers, rows: data.unassigned });
     if (data.noCodeMatch && data.noCodeMatch.length) sheets.push({ name: '无匹配自设编码', headers, rows: data.noCodeMatch });
 
-    UI.showResult('dangkou', summary, () => Excel.download(sheets, '档口分配.xlsx'), '📥 下载档口分配.xlsx');
+    const baseName = state.orderFile.name.replace(/\.xlsx$/i, '');
+    UI.showResult('dangkou', summary, () => Excel.download(sheets, baseName + '_档口分配.xlsx'), '📥 下载' + baseName + '_档口分配.xlsx');
   } catch (e) {
     UI.showError('dangkou', e.message);
   } finally {
@@ -230,7 +232,8 @@ async function runPeijian() {
     if (data.unassigned && data.unassigned.length) sheets.push({ name: '未分配档口', headers, rows: data.unassigned });
     if (data.noMatch && data.noMatch.length) sheets.push({ name: '无匹配自设编码', headers, rows: data.noMatch });
 
-    UI.showResult('peijian', summary, () => Excel.download(sheets, '配件分配.xlsx'), '📥 下载配件分配.xlsx');
+    const baseName = state.orderFile.name.replace(/\.xlsx$/i, '');
+    UI.showResult('peijian', summary, () => Excel.download(sheets, baseName + '_配件分配.xlsx'), '📥 下载' + baseName + '_配件分配.xlsx');
   } catch (e) {
     UI.showError('peijian', e.message);
   } finally {
