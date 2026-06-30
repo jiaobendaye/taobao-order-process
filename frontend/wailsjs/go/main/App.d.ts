@@ -8,6 +8,8 @@ export function GetFilterConfig():Promise<main.FilterConfig>;
 
 export function GetPeijianConfigPath():Promise<string>;
 
+export function GetPizhiConfigPath():Promise<string>;
+
 export function HandleDroppedFile(arg1:string,arg2:string):Promise<string>;
 
 export function OpenDir(arg1:string):Promise<void>;
@@ -18,14 +20,20 @@ export function RunFilter(arg1:string):Promise<main.FilterResult>;
 
 export function RunPeijianProcess(arg1:string):Promise<main.PeijianResult>;
 
+export function RunPizhiProcess(arg1:string):Promise<main.PizhiResult>;
+
 export function SaveDangkouConfigPath(arg1:string):Promise<void>;
 
 export function SaveFilterConfig(arg1:main.FilterConfig):Promise<void>;
 
 export function SavePeijianConfigPath(arg1:string):Promise<void>;
 
+export function SavePizhiConfigPath(arg1:string):Promise<void>;
+
 export function SelectDangkouConfigFile():Promise<string>;
 
 export function SelectFile():Promise<string>;
 
 export function SelectPeijianConfigFile():Promise<string>;
+
+export function SelectPizhiConfigFile():Promise<string>;

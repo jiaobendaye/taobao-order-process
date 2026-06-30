@@ -14,6 +14,10 @@ export function GetPeijianConfigPath() {
   return window['go']['main']['App']['GetPeijianConfigPath']();
 }
 
+export function GetPizhiConfigPath() {
+  return window['go']['main']['App']['GetPizhiConfigPath']();
+}
+
 export function HandleDroppedFile(arg1, arg2) {
   return window['go']['main']['App']['HandleDroppedFile'](arg1, arg2);
 }
@@ -34,6 +38,10 @@ export function RunPeijianProcess(arg1) {
   return window['go']['main']['App']['RunPeijianProcess'](arg1);
 }
 
+export function RunPizhiProcess(arg1) {
+  return window['go']['main']['App']['RunPizhiProcess'](arg1);
+}
+
 export function SaveDangkouConfigPath(arg1) {
   return window['go']['main']['App']['SaveDangkouConfigPath'](arg1);
 }
@@ -46,6 +54,10 @@ export function SavePeijianConfigPath(arg1) {
   return window['go']['main']['App']['SavePeijianConfigPath'](arg1);
 }
 
+export function SavePizhiConfigPath(arg1) {
+  return window['go']['main']['App']['SavePizhiConfigPath'](arg1);
+}
+
 export function SelectDangkouConfigFile() {
   return window['go']['main']['App']['SelectDangkouConfigFile']();
 }
@@ -56,4 +68,8 @@ export function SelectFile() {
 
 export function SelectPeijianConfigFile() {
   return window['go']['main']['App']['SelectPeijianConfigFile']();
+}
+
+export function SelectPizhiConfigFile() {
+  return window['go']['main']['App']['SelectPizhiConfigFile']();
 }

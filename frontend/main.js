@@ -10,6 +10,8 @@ const selectBtn = document.getElementById('selectBtn');
 const btnFilter = document.getElementById('btnFilter');
 const btnPeijian = document.getElementById('btnPeijian');
 const btnDangkou = document.getElementById('btnDangkou');
+const btnPizhi = document.getElementById('btnPizhi');
+const cfgPizhi = document.getElementById('cfgPizhi');
 const processing = document.getElementById('processing');
 const processingText = document.getElementById('processingText');
 const result = document.getElementById('result');
@@ -71,6 +73,7 @@ function setFile(path) {
     btnFilter.disabled = false;
     btnPeijian.disabled = false;
     btnDangkou.disabled = false;
+    btnPizhi.disabled = false;
 }
 
 // ---- 配置面板 ----
@@ -86,6 +89,7 @@ function toggleConfig(type) {
 document.getElementById('cfgFilter').addEventListener('click', function() { toggleConfig('filter'); });
 document.getElementById('cfgPeijian').addEventListener('click', function() { toggleConfig('peijian'); });
 document.getElementById('cfgDangkou').addEventListener('click', function() { toggleConfig('dangkou'); });
+document.getElementById('cfgPizhi').addEventListener('click', function() { toggleConfig('pizhi'); });
 configClose.addEventListener('click', function() { configPanel.style.display = 'none'; });
 
 async function openConfig(type) {
@@ -121,6 +125,15 @@ async function openConfig(type) {
             '<button class="btn-sm" id="cfgSelectDangkouFile">选择文件</button>' +
             '</div>' +
             '<div class="hint">选择包含自设编码映射和档口配置的 Excel 文件</div></div>';
+    } else if (type === 'pizhi') {
+        var pizhiPath = await window.go.main.App.GetPizhiConfigPath();
+        title = '皮质壳分配配置 (皮质壳配置表.xlsx)';
+        body = '<div class="config-field"><label>皮质壳配置文件路径</label>' +
+            '<div style="display:flex;gap:8px">' +
+            '<input type="text" id="cfgPizhiPath" value="' + esc(pizhiPath || '') + '" style="flex:1" readonly>' +
+            '<button class="btn-sm" id="cfgSelectPizhiFile">选择文件</button>' +
+            '</div>' +
+            '<div class="hint">选择皮质壳配置 Excel（含档口 sheet 与嵌入图片）</div></div>';
     }
     configTitle.textContent = title;
     configBody.innerHTML = body;
@@ -168,6 +181,26 @@ async function openConfig(type) {
             }
         }, 0);
     }
+    if (type === 'pizhi') {
+        setTimeout(function() {
+            var btn = document.getElementById('cfgSelectPizhiFile');
+            if (btn) {
+                btn.addEventListener('click', async function() {
+                    try {
+                        var path = await window.go.main.App.SelectPizhiConfigFile();
+                        if (path) {
+                            document.getElementById('cfgPizhiPath').value = path;
+                            configMsg.textContent = '✅ 已保存';
+                            configMsg.style.color = '';
+                        }
+                    } catch (e) {
+                        configMsg.textContent = '❌ ' + (e.message || e || '文件格式错误');
+                        configMsg.style.color = 'var(--danger)';
+                    }
+                });
+            }
+        }, 0);
+    }
 }
 
 configSave.addEventListener('click', async function() {
@@ -191,6 +224,7 @@ configSave.addEventListener('click', async function() {
 btnFilter.addEventListener('click', runFilter);
 btnPeijian.addEventListener('click', runPeijian);
 btnDangkou.addEventListener('click', runDangkou);
+btnPizhi.addEventListener('click', runPizhi);
 
 async function runFilter() {
     if (!selectedFile) return;
@@ -244,6 +278,27 @@ async function runDangkou() {
         for (var k in sm) {
             html += card(sm[k], k, k === '未分配档口' || k === '无匹配自设编码');
         }
+        resultStats.innerHTML = html;
+        result.style.display = 'block';
+    } catch (e) { hideProcessing(); showError(e.message); }
+}
+
+async function runPizhi() {
+    if (!selectedFile) return;
+    showProcessing('正在分配皮质壳...');
+    try {
+        var r = await window.go.main.App.RunPizhiProcess(selectedFile);
+        hideProcessing();
+        if (!r.success) { showError(r.error); return; }
+        currentOutputDir = r.outputPath ? r.outputPath.replace(/[^/\\]+$/, '') : null;
+        resultTitle.textContent = '皮质壳分配结果';
+        var html = '';
+        var sm = r.stallSummary || {};
+        for (var k in sm) {
+            html += card(sm[k], k + ' (型号数)');
+        }
+        html += card(r.unmatched, '未匹配', true);
+        html += card(r.total, '总订单');
         resultStats.innerHTML = html;
         result.style.display = 'block';
     } catch (e) { hideProcessing(); showError(e.message); }

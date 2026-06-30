@@ -74,6 +74,28 @@ export namespace main {
 	        this.outputPath = source["outputPath"];
 	    }
 	}
+	export class PizhiResult {
+	    success: boolean;
+	    error?: string;
+	    stallSummary: Record<string, number>;
+	    unmatched: number;
+	    total: number;
+	    outputPath: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PizhiResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.error = source["error"];
+	        this.stallSummary = source["stallSummary"];
+	        this.unmatched = source["unmatched"];
+	        this.total = source["total"];
+	        this.outputPath = source["outputPath"];
+	    }
+	}
 
 }
 

@@ -15,6 +15,7 @@ import (
 	"taobao/internal/filter"
 	"taobao/internal/logger"
 	"taobao/internal/peijian"
+	"taobao/internal/pizhi"
 )
 
 // App 后端应用
@@ -137,6 +138,43 @@ func (a *App) SelectPeijianConfigFile() (string, error) {
 	return path, nil
 }
 
+// ---- 皮质壳配置管理 ----
+
+// GetPizhiConfigPath 获取已保存的皮质壳配置文件路径
+func (a *App) GetPizhiConfigPath() string {
+	return pizhi.LoadConfigPath()
+}
+
+// SavePizhiConfigPath 保存皮质壳配置文件路径（先校验文件格式）
+func (a *App) SavePizhiConfigPath(path string) error {
+	if path == "" {
+		return fmt.Errorf("皮质壳配置文件路径不能为空")
+	}
+	if _, err := pizhi.LoadEngine(path); err != nil {
+		return fmt.Errorf("皮质壳配置文件格式错误: %w", err)
+	}
+	logger.Info("保存皮质壳配置路径: %s", path)
+	return pizhi.SaveConfigPath(path)
+}
+
+// SelectPizhiConfigFile 打开文件选择对话框选择皮质壳配置表.xlsx，校验通过后自动保存
+func (a *App) SelectPizhiConfigFile() (string, error) {
+	path, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "选择皮质壳配置 Excel 文件",
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "Excel文件 (*.xlsx)", Pattern: "*.xlsx"},
+			{DisplayName: "所有文件 (*.*)", Pattern: "*.*"},
+		},
+	})
+	if err != nil || path == "" {
+		return "", nil
+	}
+	if err := a.SavePizhiConfigPath(path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
 // ---- 处理结果 ----
 
 // FilterResult 筛选结果
@@ -164,6 +202,16 @@ type PeijianResult struct {
 	Total      int            `json:"total"`
 	OutputDir  string         `json:"outputDir"`
 	OutputPath string         `json:"outputPath"`
+}
+
+// PizhiResult 皮质壳分配结果
+type PizhiResult struct {
+	Success       bool              `json:"success"`
+	Error         string            `json:"error,omitempty"`
+	StallSummary  map[string]int    `json:"stallSummary"` // 档口名 → 型号数
+	Unmatched     int               `json:"unmatched"`     // 未匹配订单数
+	Total         int               `json:"total"`
+	OutputPath    string            `json:"outputPath"`
 }
 
 // ---- 工具方法 ----
@@ -226,6 +274,32 @@ func (a *App) RunPeijianProcess(filePath string) PeijianResult {
 		Total:      result.Total,
 		OutputDir:  result.OutputDir,
 		OutputPath: result.OutputPath,
+	}
+}
+
+// RunPizhiProcess 执行皮质壳分配
+func (a *App) RunPizhiProcess(filePath string) PizhiResult {
+	logger.Info("开始皮质壳分配: %s", filePath)
+	configPath := a.GetPizhiConfigPath()
+	if configPath == "" {
+		return PizhiResult{Success: false, Error: "请先配置皮质壳文件（点击皮质壳分配旁的⚙按钮）"}
+	}
+	result, err := pizhi.Process(filePath, configPath)
+	if err != nil {
+		logger.Error("皮质壳分配失败: %v", err)
+		return PizhiResult{Success: false, Error: err.Error()}
+	}
+	stallSummary := make(map[string]int)
+	for stall, rows := range result.StallAggregates {
+		stallSummary[stall] = len(rows)
+	}
+	logger.Info("皮质壳分配完成: %v, 未匹配=%d", stallSummary, len(result.Unmatched))
+	return PizhiResult{
+		Success:      true,
+		StallSummary: stallSummary,
+		Unmatched:    len(result.Unmatched),
+		Total:        result.Total,
+		OutputPath:   result.OutputPath,
 	}
 }
 
