@@ -247,15 +247,10 @@ func extractAccessories(skuName string) []string {
 // ---- 主处理函数 ----
 
 // Process 读取订单 Excel 并按配件编码配置提取配件、分配档口。
-// configPath 为配件编码.xlsx 的路径；若为空则尝试从 peijian_config.json 读取。
+// configPath 为配件编码.xlsx 的路径，由调用方负责传入（CLI 通过参数，GUI 通过 GetPeijianConfigPath）。
 func Process(filename, configPath string) (*Result, error) {
-	// 加载配置路径
 	if configPath == "" {
-		path := common.LoadConfigPath("peijian_config.json")
-		if path == "" {
-			return nil, fmt.Errorf("未指定配件编码文件路径，且无法加载已保存的路径\n请在GUI中先选择配件编码文件，或通过命令行传入: phonecase-tools peijian extract <订单文件> <配件编码.xlsx>")
-		}
-		configPath = path
+		return nil, fmt.Errorf("未指定配件编码配置文件路径")
 	}
 
 	// 加载引擎

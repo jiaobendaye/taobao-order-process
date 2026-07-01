@@ -199,14 +199,11 @@ func parseMaxRow(dim string) int {
 
 // ---- 主处理函数 ----
 
-// Process 读取订单 Excel 并按皮质壳配置聚合分配
+// Process 读取订单 Excel 并按皮质壳配置聚合分配。
+// configPath 为皮质壳配置表.xlsx 的路径，由调用方负责传入（CLI 通过参数，GUI 通过 GetPizhiConfigPath）。
 func Process(filename, configPath string) (*Result, error) {
 	if configPath == "" {
-		path := common.LoadConfigPath(configPathName)
-		if path == "" {
-			return nil, fmt.Errorf("未指定配置文件路径")
-		}
-		configPath = path
+		return nil, fmt.Errorf("未指定皮质壳配置文件路径")
 	}
 
 	engine, err := LoadEngine(configPath)

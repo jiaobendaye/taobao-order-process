@@ -233,15 +233,10 @@ func (e *Engine) FindStall(zisheBianma, model string) string {
 // ---- 主处理函数 ----
 
 // Process 读取订单 Excel 并按自设编码配置分配档口。
-// configPath 为自设编码.xlsx 的路径；若为空则尝试从 dangkou_config.json 读取。
+// configPath 为自设编码.xlsx 的路径，由调用方负责传入（CLI 通过参数，GUI 通过 GetDangkouConfigPath）。
 func Process(filename, configPath string) (*Result, error) {
-	// 加载配置路径
 	if configPath == "" {
-		path := common.LoadConfigPath(dangkouConfigName)
-		if path == "" {
-			return nil, fmt.Errorf("未指定配置文件路径，且无法加载已保存的路径: %w\n请在GUI中先选择自设编码文件，或通过命令行传入: phonecase-tools dangkou <订单文件> <自设编码.xlsx>", fmt.Errorf("配置未找到"))
-		}
-		configPath = path
+		return nil, fmt.Errorf("未指定自设编码配置文件路径")
 	}
 
 	// 加载引擎

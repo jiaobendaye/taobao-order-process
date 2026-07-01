@@ -31,14 +31,14 @@ description: Use the phonecase-tools CLI to process Taobao phone case order Exce
 
 - 所有子命令都**绝对路径优先**调用，CLI 内部使用 `filepath.Abs` 解析。
 - 输出目录默认在输入 Excel 同级目录下创建 `<输入文件名>_output/`。
-- 配置文件统一存放在**可执行文件同目录**（`build/bin/`）：
+- `keywords.json`（filter 关键词）放可执行文件同目录；`dangkou/peijian/pizhi` 的 `*_config.json` **只用于 GUI 持久化路径**，CLI 模式必须显式传入配置表路径。整体目录布局：
   ```
   build/bin/
   ├── phonecase-tools              # 二进制
-  ├── keywords.json                # filter 关键词
-  ├── dangkou_config.json          # 自设编码文件路径
-  ├── peijian_config.json          # 配件编码文件路径
-  ├── pizhi_config.json            # 皮质壳配置文件路径
+  ├── keywords.json                # filter 关键词（GUI/CLI 共用）
+  ├── dangkou_config.json          # 自设编码路径（仅 GUI）
+  ├── peijian_config.json          # 配件编码路径（仅 GUI）
+  ├── pizhi_config.json            # 皮质壳配置路径（仅 GUI）
   └── phonecase-tools.log          # 运行日志
   ```
 - 任何 `<订单 Excel>` 必须**至少包含表头 + 1 行数据**，否则返回「数据行不足」错误。
@@ -138,13 +138,12 @@ phonecase-tools filter <订单Excel文件>
 ### 用法
 
 ```bash
-phonecase-tools dangkou <订单Excel文件> [自设编码.xlsx]
+phonecase-tools dangkou <订单Excel文件> <自设编码.xlsx>
 # 例
 ./build/bin/phonecase-tools dangkou /abs/订单.xlsx /abs/自设编码.xlsx
-
-# 若 dangkou_config.json 已存路径，则第二个参数可省略
-./build/bin/phonecase-tools dangkou /abs/订单.xlsx
 ```
+
+> ⚠ **CLI 模式必须显式传入配置表路径**，不会从 `dangkou_config.json` 读取；该 JSON 文件仅供 GUI 模式下使用。
 
 ### 自设编码 Excel 格式
 
@@ -189,7 +188,7 @@ phonecase-tools dangkou <订单Excel文件> [自设编码.xlsx]
 | `未分配档口` | 有自设编码但找不到对应档口的订单 |
 | `无匹配自设编码` | 商品ID+SKU 在映射表中找不到 |
 
-### 配置：`dangkou_config.json`
+### 配置：`dangkou_config.json`（仅 GUI 使用）
 
 存放路径配置：
 
@@ -198,10 +197,8 @@ phonecase-tools dangkou <订单Excel文件> [自设编码.xlsx]
 ```
 
 调整方式：
-- **CLI**：`echo '{"path": "/abs/path/to/自设编码.xlsx"}' > build/bin/dangkou_config.json`
+- **CLI**：直接传第二个参数，无需（也不能）通过此 JSON 配置
 - **GUI**：点击「档口分配」旁的 ⚙ → 弹出文件选择对话框，**会自动校验格式并保存**
-
-> 注意：`LoadConfigPath` 会验证路径是否存在，所以路径变更后请同步更新配置。
 
 ---
 
@@ -212,10 +209,12 @@ phonecase-tools dangkou <订单Excel文件> [自设编码.xlsx]
 ### 用法
 
 ```bash
-phonecase-tools peijian <订单Excel文件> [配件编码.xlsx]
+phonecase-tools peijian <订单Excel文件> <配件编码.xlsx>
 # 例
 ./build/bin/phonecase-tools peijian /abs/订单.xlsx /abs/配件编码.xlsx
 ```
+
+> ⚠ **CLI 模式必须显式传入配置表路径**，不会从 `peijian_config.json` 读取；该 JSON 文件仅供 GUI 模式下使用。
 
 > 注意：CLI 只有 `peijian` 一个子命令，没有 `peijian extract` / `peijian merge`。
 
@@ -261,13 +260,15 @@ phonecase-tools peijian <订单Excel文件> [配件编码.xlsx]
 | `未分配档口` | 保留原始列 |
 | `无匹配自设编码` | 保留原始列 |
 
-### 配置：`peijian_config.json`
+### 配置：`peijian_config.json`（仅 GUI 使用）
 
 ```json
 { "path": "/abs/path/to/配件编码.xlsx" }
 ```
 
-调整方式同 `dangkou_config.json`。
+调整方式：
+- **CLI**：直接传第二个参数，无需（也不能）通过此 JSON 配置
+- **GUI**：点击「配件提取」旁的 ⚙ → 弹出文件选择对话框
 
 ---
 
@@ -278,10 +279,12 @@ phonecase-tools peijian <订单Excel文件> [配件编码.xlsx]
 ### 用法
 
 ```bash
-phonecase-tools pizhi <订单Excel文件> [皮质壳配置表.xlsx]
+phonecase-tools pizhi <订单Excel文件> <皮质壳配置表.xlsx>
 # 例
 ./build/bin/phonecase-tools pizhi /abs/订单.xlsx /abs/皮质壳配置表.xlsx
 ```
+
+> ⚠ **CLI 模式必须显式传入配置表路径**，不会从 `pizhi_config.json` 读取；该 JSON 文件仅供 GUI 模式下使用。
 
 ### 皮质壳配置表 Excel 格式
 
@@ -325,13 +328,15 @@ phonecase-tools pizhi <订单Excel文件> [皮质壳配置表.xlsx]
   档口B: 8 个型号
 ```
 
-### 配置：`pizhi_config.json`
+### 配置：`pizhi_config.json`（仅 GUI 使用）
 
 ```json
 { "path": "/abs/path/to/皮质壳配置表.xlsx" }
 ```
 
-调整方式同 `dangkou_config.json` / `peijian_config.json`。
+调整方式：
+- **CLI**：直接传第二个参数，无需（也不能）通过此 JSON 配置
+- **GUI**：点击「皮质壳分配」旁的 ⚙ → 弹出文件选择对话框
 
 ---
 
@@ -378,7 +383,6 @@ phonecase-tools pizhi <订单Excel文件> [皮质壳配置表.xlsx]
 | `未找到「商品ID」列` | 表头缺必需列，检查列名拼写 |
 | `未找到任何「编码N」列` | 配件编码配置 Sheet 1 缺 `编码1`/`编码2` 之类列 |
 | `打开配置文件失败` | 自设编码/配件编码/皮质壳配置表打不开或损坏 |
-| `未指定配置文件路径` / `配置未找到` | 配置文件路径未设置，先用 GUI ⚙ 选择或 CLI 第二个参数传入 |
 | `打开订单文件失败` | 输入 Excel 路径错或非 .xlsx |
 | `第N行 SKU「xx」有 M 个配件，但编码列有 K 个编码，数量不一致` | 配件编码列数与 `+` 段数不匹配 |
 
@@ -407,7 +411,7 @@ go test ./internal/pizhi/   -v         # 皮质壳
 
 1. **始终用绝对路径**调用 CLI，避免工作目录变化导致找不到输入文件。
 2. **四个子命令互相独立**：`filter` / `dangkou` / `peijian` / `pizhi` 没有前后依赖关系，输入文件来源不限。
-3. **配置文件存路径而非内容**：`dangkou_config.json` / `peijian_config.json` / `pizhi_config.json` 只存路径，具体配置从那个 Excel 文件读取。
+3. **CLI 必须显式传配置表路径**：`dangkou` / `peijian` / `pizhi` 的第二个参数是**必填**的，CLI 不会读取 `*_config.json`；这些 JSON 文件**仅供 GUI 持久化**上次选择的路径。
 4. **`peijian` 对数量严格匹配**：配件段数 ≠ 编码列数会直接报错 — 修改 `配件编码.xlsx` 时务必保持一致。
 5. **`pizhi` 的图片读取**：配置表 C 列必须真有嵌入图片（不能只是文字），否则该行的图片列会空白。
 6. **不要不带参数运行二进制**，否则会启动 GUI 桌面应用而不是 CLI。
