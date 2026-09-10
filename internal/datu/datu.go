@@ -153,17 +153,22 @@ func (e *Engine) LookupFactory(productID string) string {
 
 // ParseDatuCode 解析 【素材-编码】 格式
 //
+// 当存在多个 【...】 时，只取最后一个 【...】 进行解析。
 // 符合: 【DYT彩银白色-DTY7958】 -> ("DYT彩银白色", "DTY7958")
+//       【PH仓】【DYT彩银白色-DTY7958】 -> ("DYT彩银白色", "DTY7958")
 // 不符合 (如 【PH皮质】 / 【DTY彩银白色DTY7958】 / 空字符串) -> ("", "")
 func ParseDatuCode(s string) (material, code string) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return "", ""
 	}
-	if !strings.HasPrefix(s, "【") || !strings.HasSuffix(s, "】") {
+	// 取最后一个 【...】 片段
+	lastOpen := strings.LastIndex(s, "【")
+	lastClose := strings.LastIndex(s, "】")
+	if lastOpen < 0 || lastClose <= lastOpen {
 		return "", ""
 	}
-	inner := s[len("【") : len(s)-len("】")]
+	inner := s[lastOpen+len("【") : lastClose]
 	parts := strings.SplitN(inner, "-", 2)
 	if len(parts) != 2 {
 		return "", ""
