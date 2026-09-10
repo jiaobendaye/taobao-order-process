@@ -49,7 +49,7 @@ const UI = {
     if (el) el.classList.remove('active');
   },
 
-  showResult(panelId, summary, downloadFn, downloadLabel) {
+  showResult(panelId, summary, downloadFn, downloadLabel, extraDownloads) {
     const panel = document.getElementById(panelId);
     const area = panel.querySelector('.result-area');
     area.innerHTML = '';
@@ -74,6 +74,17 @@ const UI = {
       btn.textContent = downloadLabel || '下载结果';
       btn.addEventListener('click', downloadFn);
       area.appendChild(btn);
+    }
+
+    // Extra download buttons
+    if (extraDownloads) {
+      for (const dl of extraDownloads) {
+        const btn = document.createElement('button');
+        btn.className = 'btn-download';
+        btn.textContent = dl.label || '下载结果';
+        btn.addEventListener('click', dl.fn);
+        area.appendChild(btn);
+      }
     }
   },
 

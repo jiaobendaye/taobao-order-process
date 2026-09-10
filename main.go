@@ -87,6 +87,7 @@ func runCLI() {
 			os.Exit(1)
 		}
 		fmt.Printf("已生成 %s/档口分配.xlsx\n", result.OutputDir)
+		fmt.Printf("已生成 %s/拿货档口.xlsx\n", result.OutputDir)
 		fmt.Println()
 		for name, count := range result.Summary {
 			fmt.Printf("  %s: %d条\n", name, count)

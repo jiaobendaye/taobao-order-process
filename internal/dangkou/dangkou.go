@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/xuri/excelize/v2"
@@ -294,6 +295,12 @@ func Process(filename, configPath string) (*Result, error) {
 		return nil, fmt.Errorf("生成输出文件失败: %w", err)
 	}
 
+	// 生成拿货档口.xlsx（按档口名拆解市场/档口号/档口名称，按市场排序）
+	nahuoPath := filepath.Join(outputDir, "拿货档口.xlsx")
+	if err := writeNahuoOutput(nahuoPath, engine, result); err != nil {
+		return nil, fmt.Errorf("生成拿货档口文件失败: %w", err)
+	}
+
 	return result, nil
 }
 
@@ -468,11 +475,77 @@ func writeSummarySheet(f *excelize.File, sheetName string, stallNames []string, 
 	}
 }
 
+// writeNahuoOutput 生成拿货档口.xlsx，列出汇总 sheet 中出现的档口名，按 "-" 拆解为
+// 市场 | 档口号 | 档口名称 三列，按市场升序排序。
+func writeNahuoOutput(outputPath string, engine *Engine, result *Result) error {
+	// 收集有订单的档口名（按 engine.Stalls 顺序，不含未分配/无匹配）
+	var stallNames []string
+	for _, stall := range engine.Stalls {
+		if len(result.StallOrders[stall.Name]) > 0 {
+			stallNames = append(stallNames, stall.Name)
+		}
+	}
+
+	type nahuoRow struct {
+		market string
+		number string
+		stall  string
+	}
+	rows := make([]nahuoRow, 0, len(stallNames))
+	for _, name := range stallNames {
+		m, n, s := ParseStallName(name)
+		rows = append(rows, nahuoRow{m, n, s})
+	}
+	// 按市场升序排序
+	sort.SliceStable(rows, func(i, j int) bool {
+		return rows[i].market < rows[j].market
+	})
+
+	f := excelize.NewFile()
+	defer f.Close()
+	sheetName := f.GetSheetList()[0]
+
+	// 表头：产品数量 | 产品图片 | 市场 | 档口号 | 档口名称 | 支付状态 | 拿货备注
+	headers := []string{"产品数量", "产品图片", "市场", "档口号", "档口名称", "支付状态", "拿货备注"}
+	for colIdx, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
+		f.SetCellValue(sheetName, cell, h)
+	}
+	// 数据行：市场/档口号/档口名称 在第 3~5 列（C/D/E），其余列为空
+	for rowIdx, r := range rows {
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowIdx+2), r.market)
+		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowIdx+2), r.number)
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowIdx+2), r.stall)
+	}
+
+	return f.SaveAs(outputPath)
+}
+
 // ---- 向后兼容的导出 ----
 
 // StripBracketSuffix 去除字符串末尾的 [...] 或 【...】 后缀
 // Deprecated: 使用 common.StripBracketSuffix
 var StripBracketSuffix = common.StripBracketSuffix
+
+// ParseStallName 将档口名按 "-" 拆解为 (市场, 档口号, 档口名称)。
+// 依次赋值，数量不够的字段为空。每段做 TrimSpace。
+// 例："经济-4-国产哥GCG" → ("经济", "4", "国产哥GCG")
+//
+//	"经济-4"          → ("经济", "4", "")
+//	"经济"            → ("经济", "", "")
+func ParseStallName(name string) (market, number, stall string) {
+	parts := strings.Split(name, "-")
+	if len(parts) > 0 {
+		market = strings.TrimSpace(parts[0])
+	}
+	if len(parts) > 1 {
+		number = strings.TrimSpace(parts[1])
+	}
+	if len(parts) > 2 {
+		stall = strings.TrimSpace(parts[2])
+	}
+	return
+}
 
 // ---- 配置路径持久化 ----
 

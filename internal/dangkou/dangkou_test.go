@@ -2,10 +2,42 @@ package dangkou
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/xuri/excelize/v2"
 
 	"taobao/internal/common"
 )
+
+// ---- ParseStallName 测试 ----
+
+func TestParseStallName(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		wantMarket  string
+		wantNumber  string
+		wantStall   string
+	}{
+		{"三段", "经济-4-国产哥GCG", "经济", "4", "国产哥GCG"},
+		{"两段", "经济-4", "经济", "4", ""},
+		{"一段", "经济", "经济", "", ""},
+		{"空字符串", "", "", "", ""},
+		{"含多个连字符取前三段", "A-B-C-D", "A", "B", "C"},
+		{"带空格TrimSpace", "  经济 - 4 - 国产哥  ", "经济", "4", "国产哥"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, n, s := ParseStallName(tt.input)
+			if m != tt.wantMarket || n != tt.wantNumber || s != tt.wantStall {
+				t.Errorf("ParseStallName(%q) = (%q, %q, %q), want (%q, %q, %q)",
+					tt.input, m, n, s, tt.wantMarket, tt.wantNumber, tt.wantStall)
+			}
+		})
+	}
+}
 
 // TestParseSpec_StripsSpaces 验证 parseSpec 对型号去空格的行为
 func TestParseSpec_StripsSpaces(t *testing.T) {
@@ -158,4 +190,152 @@ func TestFindStall_ModelMatching_Fixed(t *testing.T) {
 		}
 		fmt.Printf("%s 规格=%q → 型号=%q → %q\n", status, order.spec, model, stall)
 	}
+}
+
+// ---- 拿货档口.xlsx 生成测试 ----
+
+func TestProcess_GeneratesNahuoOutput(t *testing.T) {
+	// 构造自设编码配置：Sheet1(映射) + Sheet2(档口A) + Sheet3(档口B)
+	configFile := createDangkouConfig(t,
+		map[string]string{"12345|透明壳": "A001"},
+		[]struct{ Name, Code, Model string }{
+			{"经济-4-国产哥GCG", "A001", "iPhone15Pro"},
+			{"康乐-4-伊点通YDT", "A001", "SamsungS24Ultra"},
+		},
+	)
+
+	// 构造订单
+	orderFile := createDangkouOrder(t, [][]string{
+		{"12345", "iPhone15Pro|透明壳[黑色]", "1"},
+		{"12345", "SamsungS24Ultra|透明壳[白色]", "2"},
+	})
+
+	result, err := Process(orderFile, configFile)
+	if err != nil {
+		t.Fatalf("Process failed: %v", err)
+	}
+
+	// 验证拿货档口.xlsx 已生成
+	nahuoPath := filepath.Join(result.OutputDir, "拿货档口.xlsx")
+	if _, err := os.Stat(nahuoPath); os.IsNotExist(err) {
+		t.Fatalf("拿货档口.xlsx 未生成: %s", nahuoPath)
+	}
+
+	// 打开验证内容
+	f, err := excelize.OpenFile(nahuoPath)
+	if err != nil {
+		t.Fatalf("打开拿货档口.xlsx 失败: %v", err)
+	}
+	defer f.Close()
+
+	rows, err := f.GetRows(f.GetSheetList()[0])
+	if err != nil {
+		t.Fatalf("读取拿货档口 sheet 失败: %v", err)
+	}
+	if len(rows) < 1 {
+		t.Fatalf("拿货档口 sheet 为空")
+	}
+
+	// 表头应为 产品数量 | 产品图片 | 市场 | 档口号 | 档口名称 | 支付状态 | 拿货备注
+	wantHeaders := []string{"产品数量", "产品图片", "市场", "档口号", "档口名称", "支付状态", "拿货备注"}
+	if len(rows[0]) < len(wantHeaders) {
+		t.Fatalf("表头列数不足: %v", rows[0])
+	}
+	for i, h := range wantHeaders {
+		if rows[0][i] != h {
+			t.Errorf("表头[%d] = %q, want %q", i, rows[0][i], h)
+		}
+	}
+
+	// 数据行应为 2 行，按市场排序；市场/档口号/档口名称 在第 3~5 列（索引 2~4），其余列为空
+	// 经济-4-国产哥GCG → 经济, 4, 国产哥GCG
+	// 康乐-4-伊点通YDT → 康乐, 4, 伊点通YDT
+	// "康乐" < "经济" 按升序排序
+	if len(rows) < 3 {
+		t.Fatalf("数据行不足: %d 行（含表头应至少3行）", len(rows))
+	}
+	wantRow1 := []string{"", "", "康乐", "4", "伊点通YDT", "", ""}
+	wantRow2 := []string{"", "", "经济", "4", "国产哥GCG", "", ""}
+	padRow := func(r []string, n int) []string {
+		out := make([]string, n)
+		copy(out, r)
+		return out
+	}
+	row1 := padRow(rows[1], len(wantRow1))
+	row2 := padRow(rows[2], len(wantRow2))
+	for i, w := range wantRow1 {
+		if row1[i] != w {
+			t.Errorf("数据行1[%d] = %q, want %q", i, row1[i], w)
+		}
+	}
+	for i, w := range wantRow2 {
+		if row2[i] != w {
+			t.Errorf("数据行2[%d] = %q, want %q", i, row2[i], w)
+		}
+	}
+}
+
+// createDangkouConfig 构造测试用的自设编码 Excel
+func createDangkouConfig(t *testing.T, mapping map[string]string, stalls []struct{ Name, Code, Model string }) string {
+	t.Helper()
+	f := excelize.NewFile()
+	defer f.Close()
+
+	// Sheet 1: 映射
+	sheet1 := "自设编码"
+	f.SetSheetName("Sheet1", sheet1)
+	f.SetCellValue(sheet1, "A1", "商品ID")
+	f.SetCellValue(sheet1, "B1", "SKU名称")
+	f.SetCellValue(sheet1, "C1", "自设编码")
+	row := 2
+	for key, code := range mapping {
+		parts := splitKey(key)
+		f.SetCellValue(sheet1, fmt.Sprintf("A%d", row), parts[0])
+		f.SetCellValue(sheet1, fmt.Sprintf("B%d", row), parts[1])
+		f.SetCellValue(sheet1, fmt.Sprintf("C%d", row), code)
+		row++
+	}
+
+	// 后续 Sheet: 档口
+	for _, s := range stalls {
+		f.NewSheet(s.Name)
+		f.SetCellValue(s.Name, "A1", s.Code)
+		f.SetCellValue(s.Name, "A2", s.Model)
+	}
+
+	path := filepath.Join(t.TempDir(), "test_dangkou_config.xlsx")
+	if err := f.SaveAs(path); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func splitKey(key string) []string {
+	for i := 0; i < len(key); i++ {
+		if key[i] == '|' {
+			return []string{key[:i], key[i+1:]}
+		}
+	}
+	return []string{key, ""}
+}
+
+// createDangkouOrder 构造测试用的订单 Excel
+func createDangkouOrder(t *testing.T, rows [][]string) string {
+	t.Helper()
+	f := excelize.NewFile()
+	defer f.Close()
+	f.SetCellValue("Sheet1", "A1", "商品id")
+	f.SetCellValue("Sheet1", "B1", "商品规格")
+	f.SetCellValue("Sheet1", "C1", "商品数量")
+	for i, row := range rows {
+		for j, val := range row {
+			cell, _ := excelize.CoordinatesToCellName(j+1, i+2)
+			f.SetCellValue("Sheet1", cell, val)
+		}
+	}
+	path := filepath.Join(t.TempDir(), "test_dangkou_order.xlsx")
+	if err := f.SaveAs(path); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

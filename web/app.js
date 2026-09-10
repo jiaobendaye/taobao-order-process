@@ -208,7 +208,17 @@ async function runDangkou() {
     if (data.noCodeMatch && data.noCodeMatch.length) sheets.push({ name: '无匹配自设编码', headers, rows: data.noCodeMatch });
 
     const baseName = state.orderFile.name.replace(/\.xlsx$/i, '');
-    UI.showResult('dangkou', summary, () => Excel.download(sheets, baseName + '_档口分配.xlsx'), '📥 下载' + baseName + '_档口分配.xlsx');
+    // 拿货档口 sheet：有订单的档口名按 '-' 拆解为 市场/档口号/档口名称，按市场排序
+    const nahuoStalls = stallOrder.filter(n => data.stallOrders[n] && data.stallOrders[n].length);
+    const nahuoHeaders = ['产品数量', '产品图片', '市场', '档口号', '档口名称', '支付状态', '拿货备注'];
+    const nahuoRows = nahuoStalls.map(n => {
+      const parts = n.split('-');
+      return ['', '', String(parts[0] || '').trim(), String(parts[1] || '').trim(), String(parts[2] || '').trim(), '', ''];
+    }).sort((a, b) => a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0);
+    const nahuoSheet = { name: 'sheet1', headers: nahuoHeaders, rows: nahuoRows };
+
+    UI.showResult('dangkou', summary, () => Excel.download(sheets, baseName + '_档口分配.xlsx'), '📥 下载' + baseName + '_档口分配.xlsx',
+      nahuoRows.length ? [{ label: '📥 下载' + baseName + '_拿货档口.xlsx', fn: () => Excel.download([nahuoSheet], baseName + '_拿货档口.xlsx') }] : null);
   } catch (e) {
     UI.showError('dangkou', e.message);
   } finally {
