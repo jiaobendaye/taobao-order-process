@@ -341,6 +341,40 @@ func TestProcessData_AliasNormalization(t *testing.T) {
 	}
 }
 
+func TestProcessData_StandaloneAccessoriesTrackedSeparately(t *testing.T) {
+	// 含 + 的 SKU 和不含 + 的 SKU 都走档口分配，不含 + 的额外记入 Standalone
+	engine := &Engine{
+		Mapping: map[string][]string{
+			"111|壳+配件a":  {"CODE1"},
+			"222|单独配件b": {"CODE2"},
+		},
+		Stalls:     map[string]string{"code1": "档口A", "code2": "档口A"},
+		StallOrder: []string{"档口A"},
+	}
+
+	headers := []string{"商品id", "商品规格", "商品数量"}
+	dataRows := [][]string{
+		{"111", "Phone|壳+配件A", "2"},  // 含 +
+		{"222", "Phone|单独配件B", "3"}, // 不含 +
+	}
+
+	result := ProcessData(dataRows, headers, engine)
+
+	// 两个订单都应出现在档口A（保留分配）
+	if got := len(result.StallOrders["档口A"]); got != 2 {
+		t.Fatalf("档口A 订单数 = %d, want 2 (含+和不含+都应分配)", got)
+	}
+
+	// 不含 + 的订单应额外记入 Standalone
+	if got := len(result.Standalone); got != 1 {
+		t.Fatalf("Standalone 行数 = %d, want 1", got)
+	}
+	// 记录的应是「单独配件B」那行
+	if result.Standalone[0][0] != "222" {
+		t.Errorf("Standalone 行 = %v, want 商品id=222 的行", result.Standalone[0])
+	}
+}
+
 // ---- Process 集成测试 ----
 
 func TestProcess_EndToEnd(t *testing.T) {
@@ -580,6 +614,52 @@ func TestProcess_UnassignedStall(t *testing.T) {
 
 	if len(result.Unassigned) != 1 {
 		t.Errorf("expected 1 unassigned, got %d", len(result.Unassigned))
+	}
+}
+
+func TestProcess_StandaloneSheetAfterSummary(t *testing.T) {
+	// 构造一个含 + 和一个不含 + 的订单，验证输出 Excel 中「单独配件」Sheet 位于「汇总」之后
+	configFile := createTestConfig(t,
+		[]string{"商品ID", "SKU名称", "编码1"},
+		[][]string{
+			{"111", "壳+配件A", "CODE1"},
+			{"222", "单独配件B", "CODE2"},
+		},
+		[]string{"档口A"},
+		[]string{"CODE1", "CODE2"},
+	)
+
+	headers := []string{"商品id", "商品规格", "商品数量"}
+	orderFile := createTestOrder(t, headers, [][]string{
+		{"111", "Phone|壳+配件A", "1"},
+		{"222", "Phone|单独配件B", "1"},
+	})
+
+	result, err := Process(orderFile, configFile)
+	if err != nil {
+		t.Fatalf("Process failed: %v", err)
+	}
+
+	if len(result.Standalone) != 1 {
+		t.Fatalf("Standalone 行数 = %d, want 1", len(result.Standalone))
+	}
+
+	// 验证输出 Excel 的 Sheet 顺序：汇总 → 单独配件 → 档口A → ...
+	f, err := excelize.OpenFile(result.OutputPath)
+	if err != nil {
+		t.Fatalf("打开输出文件失败: %v", err)
+	}
+	defer f.Close()
+
+	sheets := f.GetSheetList()
+	wantOrder := []string{"汇总", "单独配件", "档口A"}
+	if len(sheets) < 3 {
+		t.Fatalf("Sheet 数量 = %d, want >= 3", len(sheets))
+	}
+	for i, want := range wantOrder {
+		if sheets[i] != want {
+			t.Errorf("Sheet[%d] = %q, want %q (full order: %v)", i, sheets[i], want, sheets)
+		}
 	}
 }
 

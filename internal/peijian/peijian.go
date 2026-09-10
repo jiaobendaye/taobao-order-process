@@ -36,6 +36,7 @@ type Result struct {
 	StallOrders map[string][]accessoryRow `json:"stallOrders"` // 档口名 → 配件行列表
 	NoMatch     [][]string                `json:"noMatch"`     // 无匹配自设编码的行（原始数据行）
 	Unassigned  [][]string                `json:"unassigned"`  // 有自设编码但无档口匹配的行
+	Standalone  [][]string                `json:"standalone"`  // SKU名称不含+的订单原始行（仍参与档口分配，额外单独输出）
 	Summary     map[string]int            `json:"summary"`     // 档口名 → 配件数量
 	OutputDir   string                    `json:"outputDir"`
 	OutputPath  string                    `json:"outputPath"`
@@ -426,6 +427,11 @@ func ProcessData(dataRows [][]string, headers []string, engine *Engine) *Result 
 			continue
 		}
 
+		// SKU名称不含 + 的订单为单独配件，额外记入 Standalone（仍继续走档口分配）
+		if !strings.Contains(skuName, "+") {
+			result.Standalone = append(result.Standalone, row)
+		}
+
 		if len(accessories) != len(codes) {
 			for range accessories {
 				result.Unassigned = append(result.Unassigned, row)
@@ -532,6 +538,14 @@ func writeOutput(outputPath string, headers []string, engine *Engine, result *Re
 	}
 	f.SetSheetName("Sheet1", "汇总")
 	writeSummarySheet(f, "汇总", activeStalls, result)
+
+	// 单独配件 sheet（紧随汇总，输出原始完整行）
+	if len(result.Standalone) > 0 {
+		if _, err := f.NewSheet("单独配件"); err != nil {
+			return err
+		}
+		writeFullSheet(f, "单独配件", headers, result.Standalone)
+	}
 
 	// 各明细 sheet
 	for _, sd := range detailSheets {

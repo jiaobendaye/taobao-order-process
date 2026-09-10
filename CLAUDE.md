@@ -130,6 +130,7 @@ phonecase-tools peijian <订单Excel文件> <配件编码.xlsx>
 - 商品ID 用 `GetCellValueSafe`（非 `GetRows`）读取以避免科学计数法/大数字精度问题
 - 输出 `<订单名>_output/配件分配.xlsx`：
   - 汇总 Sheet（首位）：每列一个活跃档口，下方 `配件名 x数量`，按数量降序
+  - 单独配件 Sheet（汇总之后）：SKU名称不含 `+` 的订单原始完整行（仍参与档口分配，额外单独输出）
   - 每档口一个明细 Sheet：`店铺名称|订单编号|商品id|商品规格|商品数量|配件名称`
   - `未分配档口` / `无匹配自设编码`：输出原始完整行
 - 配件编码文件路径保存在 `peijian_config.json`

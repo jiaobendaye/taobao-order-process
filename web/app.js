@@ -249,6 +249,10 @@ async function runPeijian() {
       const summaryRows = buildPeijianSummary(activeStalls, data.stallOrders, outputHeaders, headers);
       sheets.push({ name: '汇总', headers: activeStalls, rows: summaryRows });
     }
+    // 单独配件 sheet（紧随汇总，输出原始完整行）
+    if (data.standalone && data.standalone.length) {
+      sheets.push({ name: '单独配件', headers, rows: data.standalone });
+    }
     for (const name of activeStalls) {
       const orders = data.stallOrders[name] || [];
       const rows = orders.map(o => {
