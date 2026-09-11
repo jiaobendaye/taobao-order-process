@@ -183,6 +183,40 @@ func TestProcessData_NoNotesColumns(t *testing.T) {
 	}
 }
 
+// spec 格式反转（sku|model）时仍能正确匹配并输出 model
+func TestProcessData_ReversedSpecFormat(t *testing.T) {
+	engine := &Engine{
+		Items: map[string]ConfigItem{
+			"988808938880|喜马拉雅白鳄鱼": {Stall: "鹏华"},
+		},
+		Stalls: []string{"鹏华"},
+	}
+
+	headers := []string{"商品id", "商品规格", "商品数量"}
+	rows := [][]string{
+		// 旧格式 model|sku
+		{"988808938880", "iPhone15|喜马拉雅白鳄鱼", "2"},
+		// 新格式 sku|model
+		{"988808938880", "喜马拉雅白鳄鱼|iPhone15", "1"},
+	}
+
+	result := ProcessData(rows, headers, engine)
+	penghua := result.StallOrders["鹏华"]
+	if len(penghua) != 2 {
+		t.Fatalf("鹏华订单行数 = %d, want 2 (旧格式1 + 新格式1)", len(penghua))
+	}
+
+	// 两行的 model 都应该是 iPhone15
+	for i, r := range penghua {
+		if r.Model != "iPhone15" {
+			t.Errorf("第%d行 model = %q, want iPhone15", i+1, r.Model)
+		}
+		if r.SKU != "喜马拉雅白鳄鱼" {
+			t.Errorf("第%d行 SKU = %q, want 喜马拉雅白鳄鱼", i+1, r.SKU)
+		}
+	}
+}
+
 // 端到端：用 data/ 下的真实文件加载 + 处理
 func TestLoadEngineAndProcess_RealFile(t *testing.T) {
 	cfgPath := filepath.Join("..", "..", "data", "皮质壳配置表.xlsx")

@@ -412,11 +412,19 @@ func ProcessData(dataRows [][]string, headers []string, engine *Engine) *Result 
 		if colSpec >= 0 && colSpec < len(row) {
 			spec = strings.TrimSpace(row[colSpec])
 		}
-		_, skuName := common.ParseSpec(spec)
 
-		key := strings.ToLower(productID + "|" + skuName)
-		codes, ok := engine.Mapping[key]
-		if !ok {
+		// 兼容 model|sku 和 sku|model 两种格式：用配置映射表确定方向
+		part1, part2 := common.SplitSpec(spec)
+		key1 := strings.ToLower(productID + "|" + part1)
+		key2 := strings.ToLower(productID + "|" + part2)
+		var codes []string
+		var skuName string
+		if c, ok := engine.Mapping[key1]; ok {
+			codes, skuName = c, part1
+		} else if c, ok := engine.Mapping[key2]; ok {
+			codes, skuName = c, part2
+		}
+		if codes == nil {
 			result.NoMatch = append(result.NoMatch, row)
 			continue
 		}

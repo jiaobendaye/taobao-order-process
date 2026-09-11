@@ -375,6 +375,40 @@ func TestProcessData_StandaloneAccessoriesTrackedSeparately(t *testing.T) {
 	}
 }
 
+// TestProcessData_ReversedSpecFormat 验证 spec 格式反转（sku|model）时仍能正确匹配并提取配件
+func TestProcessData_ReversedSpecFormat(t *testing.T) {
+	engine := &Engine{
+		Mapping: map[string][]string{
+			"123|壳+配件a": {"CODE1"},
+			"456|单独配件b": {"CODE2"},
+		},
+		Stalls:     map[string]string{"code1": "档口A", "code2": "档口A"},
+		StallOrder: []string{"档口A"},
+	}
+
+	headers := []string{"商品id", "商品规格", "商品数量"}
+	dataRows := [][]string{
+		// 旧格式 model|sku
+		{"123", "Phone|壳+配件A", "2"},
+		{"456", "Phone|单独配件B", "3"},
+		// 新格式 sku|model
+		{"123", "壳+配件A|Phone", "2"},
+		{"456", "单独配件B|Phone", "3"},
+	}
+
+	result := ProcessData(dataRows, headers, engine)
+
+	// 4 个订单都应出现在档口A
+	if got := len(result.StallOrders["档口A"]); got != 4 {
+		t.Fatalf("档口A 订单数 = %d, want 4 (旧格式2 + 新格式2)", got)
+	}
+
+	// 不含 + 的订单（旧格式 + 新格式各1个）应记入 Standalone
+	if got := len(result.Standalone); got != 2 {
+		t.Fatalf("Standalone 行数 = %d, want 2", got)
+	}
+}
+
 // ---- Process 集成测试 ----
 
 func TestProcess_EndToEnd(t *testing.T) {

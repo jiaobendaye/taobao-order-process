@@ -99,6 +99,39 @@ func TestParseSpec(t *testing.T) {
 	}
 }
 
+func TestSplitSpec(t *testing.T) {
+	tests := []struct {
+		spec     string
+		wantPart1 string
+		wantPart2 string
+	}{
+		// 旧格式 model|sku
+		{"iPhone15Pro|透明壳[黑色]", "iPhone15Pro", "透明壳"},
+		{"华为Pura 70 Pro+|薄荷波点+薄荷糖支架", "华为Pura 70 Pro+", "薄荷波点+薄荷糖支架"},
+		// 新格式 sku|model
+		{"透明壳[黑色]|iPhone15Pro", "透明壳", "iPhone15Pro"},
+		{"薄荷波点+薄荷糖支架|华为Pura 70 Pro+", "薄荷波点+薄荷糖支架", "华为Pura 70 Pro+"},
+		// 带空格
+		{" iPhone 15 Pro | 透明壳 【蓝色】 ", "iPhone 15 Pro", "透明壳"},
+		// 无管道符
+		{"透明壳[黑色]", "", "透明壳"},
+		{"no pipe just SKU[红色]", "", "no pipe just SKU"},
+		// 管道符边界
+		{"|", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.spec, func(t *testing.T) {
+			part1, part2 := SplitSpec(tt.spec)
+			if part1 != tt.wantPart1 {
+				t.Errorf("SplitSpec(%q) part1 = %q, want %q", tt.spec, part1, tt.wantPart1)
+			}
+			if part2 != tt.wantPart2 {
+				t.Errorf("SplitSpec(%q) part2 = %q, want %q", tt.spec, part2, tt.wantPart2)
+			}
+		})
+	}
+}
+
 func TestConfigPathAndSearchPaths(t *testing.T) {
 	// ConfigPath should return a non-empty path
 	path := ConfigPath("test.json")

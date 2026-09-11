@@ -328,8 +328,17 @@ func ProcessData(dataRows [][]string, headers []string, engine *Engine) *Result 
 			spec = strings.TrimSpace(row[colSpec])
 		}
 
-		model, skuName := common.ParseSpec(spec)
-		zisheBianma := engine.LookupZisheBianma(productID, skuName)
+		// 兼容 model|sku 和 sku|model 两种格式：用配置映射表确定方向
+		part1, part2 := common.SplitSpec(spec)
+		var zisheBianma, model string
+		if code := engine.LookupZisheBianma(productID, part1); code != "" {
+			zisheBianma = code
+			model = strings.ReplaceAll(part2, " ", "")
+		} else if code := engine.LookupZisheBianma(productID, part2); code != "" {
+			zisheBianma = code
+			model = strings.ReplaceAll(part1, " ", "")
+		}
+
 		if zisheBianma == "" {
 			result.NoCodeMatch = append(result.NoCodeMatch, row)
 			continue

@@ -129,8 +129,8 @@ func TestProcessData_UnmatchedCodeProducesEmptyFields(t *testing.T) {
 	if got[0].Code != "" || got[0].Material != "" {
 		t.Errorf("编码/素材应为空, got (%q,%q)", got[0].Code, got[0].Material)
 	}
-	if got[0].Model != "小米14" {
-		t.Errorf("手机型号 = %q, want 小米14", got[0].Model)
+	if got[0].Model != "小米 14|薄荷海" {
+		t.Errorf("手机型号 = %q, want 小米 14|薄荷海", got[0].Model)
 	}
 	if got[0].PaymentTime != "2026-06-28 10:56:42" {
 		t.Errorf("PaymentTime = %q, want %q", got[0].PaymentTime, "2026-06-28 10:56:42")

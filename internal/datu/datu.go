@@ -270,8 +270,8 @@ func ProcessData(dataRows [][]string, headers []string, engine *Engine) *Result 
 		if colSpec >= 0 && colSpec < len(row) {
 			spec = strings.TrimSpace(row[colSpec])
 		}
-		model, _ := common.ParseSpec(spec)
-		// ParseSpec 已 strip 末尾 [...] / 【...】，符合我们对手机型号的预期
+		// datu 不按 spec 匹配（仅按 productID），无法确定方向，输出整个 spec 去括号
+		model := common.StripBracketSuffix(spec)
 
 		material, code := "", ""
 		if colDatuCode >= 0 && colDatuCode < len(row) {

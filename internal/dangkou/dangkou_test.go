@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/xuri/excelize/v2"
@@ -189,6 +190,69 @@ func TestFindStall_ModelMatching_Fixed(t *testing.T) {
 				zisheBianma, model, stall, order.wantStall)
 		}
 		fmt.Printf("%s 规格=%q → 型号=%q → %q\n", status, order.spec, model, stall)
+	}
+}
+
+// TestFindStall_ReversedSpecFormat 验证 spec 格式反转（sku|model）时仍能正确匹配档口
+func TestFindStall_ReversedSpecFormat(t *testing.T) {
+	engine := &Engine{
+		Mapping: map[string]string{
+			"12345|透明壳": "A001",
+		},
+		Stalls: []StallConfig{
+			{
+				Name:     "档口A",
+				Priority: 0,
+				Codes: map[string][]string{
+					"a001": {"iPhone15Pro", "iPhone15ProMax"},
+				},
+			},
+			{
+				Name:     "档口B",
+				Priority: 1,
+				Codes: map[string][]string{
+					"a001": {"SamsungS24Ultra", "Pixel8"},
+				},
+			},
+		},
+	}
+
+	orders := []struct {
+		productID string
+		spec      string
+		wantStall string
+	}{
+		// 旧格式 model|sku
+		{productID: "12345", spec: "iPhone15Pro|透明壳[黑色]", wantStall: "档口A"},
+		{productID: "12345", spec: "SamsungS24Ultra|透明壳[白色]", wantStall: "档口B"},
+		// 新格式 sku|model
+		{productID: "12345", spec: "透明壳[黑色]|iPhone15Pro", wantStall: "档口A"},
+		{productID: "12345", spec: "透明壳[白色]|SamsungS24Ultra", wantStall: "档口B"},
+		// 新格式带空格
+		{productID: "12345", spec: "透明壳|Samsung S24 Ultra", wantStall: "档口B"},
+		{productID: "12345", spec: "透明壳| iPhone   15  Pro Max ", wantStall: "档口A"},
+		// 两侧都未命中
+		{productID: "12345", spec: "透明壳|UnknownModel", wantStall: ""},
+	}
+
+	for _, order := range orders {
+		part1, part2 := common.SplitSpec(order.spec)
+		var zisheBianma, model string
+		if code := engine.LookupZisheBianma(order.productID, part1); code != "" {
+			zisheBianma = code
+			model = strings.ReplaceAll(part2, " ", "")
+		} else if code := engine.LookupZisheBianma(order.productID, part2); code != "" {
+			zisheBianma = code
+			model = strings.ReplaceAll(part1, " ", "")
+		}
+		stall := engine.FindStall(zisheBianma, model)
+
+		status := "✅"
+		if stall != order.wantStall {
+			status = "❌"
+			t.Errorf("spec=%q → stall=%q, want %q", order.spec, stall, order.wantStall)
+		}
+		fmt.Printf("%s 规格=%q → 编码=%q 型号=%q → %q\n", status, order.spec, zisheBianma, model, stall)
 	}
 }
 

@@ -289,13 +289,22 @@ func ProcessData(dataRows [][]string, headers []string, engine *Engine) *Result 
 		buyerNote := readNote(row, colBuyerNote)
 		sellerNote := readNote(row, colSellerNote)
 
-		model, skuName := common.ParseSpec(spec)
-		imageKey := strings.ToLower(productID + "|" + skuName)
-
-		item, ok := engine.Items[imageKey]
+		// 兼容 model|sku 和 sku|model 两种格式：用配置 Items 表确定方向
+		part1, part2 := common.SplitSpec(spec)
+		key1 := strings.ToLower(productID + "|" + part1)
+		key2 := strings.ToLower(productID + "|" + part2)
+		var item ConfigItem
+		var ok bool
+		var skuName, model string
+		if item, ok = engine.Items[key1]; ok {
+			skuName, model = part1, part2
+		} else if item, ok = engine.Items[key2]; ok {
+			skuName, model = part2, part1
+		}
 		if !ok {
 			continue
 		}
+		imageKey := strings.ToLower(productID + "|" + skuName)
 
 		result.StallOrders[item.Stall] = append(result.StallOrders[item.Stall], OrderRow{
 			ProductID:  productID,

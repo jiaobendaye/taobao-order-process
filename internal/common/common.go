@@ -90,6 +90,21 @@ func ParseSpec(spec string) (model, skuName string) {
 	return
 }
 
+// SplitSpec 拆分商品规格为两部分，不假设哪侧是 SKU 或 model。
+// 按 "|" 拆分，两侧 TrimSpace + StripBracketSuffix。
+// 无 "|" 时 part1 为空，part2 为整个 spec 去括号。
+func SplitSpec(spec string) (part1, part2 string) {
+	spec = strings.TrimSpace(spec)
+	if idx := strings.Index(spec, "|"); idx >= 0 {
+		part1 = StripBracketSuffix(spec[:idx])
+		part2 = StripBracketSuffix(spec[idx+1:])
+	} else {
+		part1 = ""
+		part2 = StripBracketSuffix(spec)
+	}
+	return
+}
+
 // ---- 配置路径持久化 ----
 
 // ConfigPath 返回配置文件的完整路径（可执行文件同目录）
