@@ -199,7 +199,8 @@ async function runDangkou() {
     summary['未分配档口'] = (data.unassigned || []).length;
 
     const stallOrder = (state.dangkouEngine.stalls || []).map(s => s.name);
-    const sheets = [{ name: '汇总', headers: stallOrder, rows: buildSummaryRows(stallOrder, data.stallOrders, headers, '订单编号') }];
+    const activeStalls = stallOrder.filter(n => data.stallOrders[n] && data.stallOrders[n].length);
+    const sheets = [{ name: '汇总', headers: activeStalls, rows: buildSummaryRows(activeStalls, data.stallOrders, headers, '订单编号') }];
     for (const name of stallOrder) {
       if (data.stallOrders[name] && data.stallOrders[name].length)
         sheets.push({ name, headers, rows: data.stallOrders[name] });
