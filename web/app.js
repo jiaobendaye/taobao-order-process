@@ -434,13 +434,13 @@ async function runDatu() {
     }
     summary['总订单'] = data.total || 0;
 
-    const outputHeaders = ['编码', '手机型号', '素材', '数量', '姓名', '付款时间'];
+    const outputHeaders = ['订单号', '编码', '手机型号', '素材', '数量', '姓名', '付款时间'];
     const sheets = [];
     for (const factory of state.datuEngine.factories) {
       const orders = factoryOrders[factory];
       if (!orders || !orders.length) continue;
       const outRows = orders.map(r => [
-        r.code || '', r.model || '', r.material || '',
+        r.orderId || '', r.code || '', r.model || '', r.material || '',
         r.quantity || 0, r.name || '凡凡', r.paymentTime || ''
       ]);
       sheets.push({ name: factory, headers: outputHeaders, rows: outRows });

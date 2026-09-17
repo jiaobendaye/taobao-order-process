@@ -36,6 +36,7 @@ type OutputRow struct {
 	Material    string `json:"material"`    // 素材
 	Quantity    int    `json:"quantity"`    // 单订单数量（不累加）
 	Name        string `json:"name"`        // 姓名（固定 凡凡）
+	OrderID     string `json:"orderId"`     // 订单号（订单编号，列缺失时为空字符串）
 	PaymentTime string `json:"paymentTime"` // 付款时间（订单原值透传，列缺失时为空字符串）
 	BuyerNote   string `json:"buyerNote"`   // 买家留言（订单原值透传，列缺失时为空字符串）
 	SellerNote  string `json:"sellerNote"`  // 卖家备注（订单原值透传，列缺失时为空字符串）
@@ -246,6 +247,7 @@ func ProcessData(dataRows [][]string, headers []string, engine *Engine) *Result 
 	colSpec := common.FindColumn(headers, "商品规格")
 	colDatuCode := common.FindColumn(headers, "商品规格商家编码")
 	colQty := common.FindColumn(headers, "商品数量")
+	colOrderID := common.FindColumn(headers, "订单编号")
 	colPayTime := common.FindColumn(headers, "付款时间")
 	colBuyerNote := common.FindColumn(headers, "买家留言")
 	colSellerNote := common.FindColumn(headers, "卖家备注")
@@ -284,6 +286,7 @@ func ProcessData(dataRows [][]string, headers []string, engine *Engine) *Result 
 		}
 
 		payTime := readCell(row, colPayTime)
+		orderID := readCell(row, colOrderID)
 		buyerNote := readCell(row, colBuyerNote)
 		sellerNote := readCell(row, colSellerNote)
 
@@ -293,6 +296,7 @@ func ProcessData(dataRows [][]string, headers []string, engine *Engine) *Result 
 			Material:    material,
 			Quantity:    qty,
 			Name:        DefaultName,
+			OrderID:     orderID,
 			PaymentTime: payTime,
 			BuyerNote:   buyerNote,
 			SellerNote:  sellerNote,
@@ -363,9 +367,9 @@ func writeOutput(outputPath string, engine *Engine, result *Result) error {
 	return out.SaveAs(outputPath)
 }
 
-// writeFactorySheet 写单个工厂 sheet：表头 [序号, 编码, 手机型号, 素材, 数量, 姓名, 付款时间, 买家留言, 卖家备注]
+// writeFactorySheet 写单个工厂 sheet：表头 [订单号, 序号, 编码, 手机型号, 素材, 数量, 姓名, 付款时间, 买家留言, 卖家备注]
 func writeFactorySheet(out *excelize.File, sheetName string, rows []OutputRow) {
-	headers := []string{"序号", "编码", "手机型号", "素材", "数量", "姓名", "付款时间", "买家留言", "卖家备注"}
+	headers := []string{"订单号", "序号", "编码", "手机型号", "素材", "数量", "姓名", "付款时间", "买家留言", "卖家备注"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		_ = out.SetCellValue(sheetName, cell, h)
@@ -373,15 +377,16 @@ func writeFactorySheet(out *excelize.File, sheetName string, rows []OutputRow) {
 
 	for i, r := range rows {
 		rowNum := i + 2
-		_ = out.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), i+1)
-		_ = out.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), r.Code)
-		_ = out.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), r.Model)
-		_ = out.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), r.Material)
-		_ = out.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), r.Quantity)
-		_ = out.SetCellValue(sheetName, fmt.Sprintf("F%d", rowNum), r.Name)
-		_ = out.SetCellValue(sheetName, fmt.Sprintf("G%d", rowNum), r.PaymentTime)
-		_ = out.SetCellValue(sheetName, fmt.Sprintf("H%d", rowNum), r.BuyerNote)
-		_ = out.SetCellValue(sheetName, fmt.Sprintf("I%d", rowNum), r.SellerNote)
+		_ = out.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), r.OrderID)
+		_ = out.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), i+1)
+		_ = out.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), r.Code)
+		_ = out.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), r.Model)
+		_ = out.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), r.Material)
+		_ = out.SetCellValue(sheetName, fmt.Sprintf("F%d", rowNum), r.Quantity)
+		_ = out.SetCellValue(sheetName, fmt.Sprintf("G%d", rowNum), r.Name)
+		_ = out.SetCellValue(sheetName, fmt.Sprintf("H%d", rowNum), r.PaymentTime)
+		_ = out.SetCellValue(sheetName, fmt.Sprintf("I%d", rowNum), r.BuyerNote)
+		_ = out.SetCellValue(sheetName, fmt.Sprintf("J%d", rowNum), r.SellerNote)
 	}
 }
 

@@ -246,6 +246,45 @@ func TestProcessData_NameIsFixed(t *testing.T) {
 	}
 }
 
+// ---- 订单号 ----
+
+func TestProcessData_OrderIDPassThrough(t *testing.T) {
+	engine := newEngine()
+	headers := []string{"商品id", "商品规格", "商品规格商家编码", "商品数量", "订单编号", "付款时间"}
+	rows := [][]string{
+		{"1050879735957", "小米 14|薄荷海", "【DYT彩银白色-DTY7958】", "1", "4028857312345", "2026-06-28 10:00:00"},
+		{"1053838905482", "华为 Mate 60 Pro|薄荷海", "【DYT彩银白色-DTY7958】", "2", "4028857399999", "2026-06-28 11:00:00"},
+	}
+	result := ProcessData(rows, headers, engine)
+	got := result.FactoryOrders["打图工厂1"]
+	if len(got) != 2 {
+		t.Fatalf("rows = %d, want 2", len(got))
+	}
+	if got[0].OrderID != "4028857312345" {
+		t.Errorf("OrderID[0] = %q, want %q", got[0].OrderID, "4028857312345")
+	}
+	if got[1].OrderID != "4028857399999" {
+		t.Errorf("OrderID[1] = %q, want %q", got[1].OrderID, "4028857399999")
+	}
+}
+
+func TestProcessData_MissingOrderIDColumn(t *testing.T) {
+	engine := newEngine()
+	// 源文件无 订单编号 列
+	headers := []string{"商品id", "商品规格", "商品规格商家编码", "商品数量", "付款时间"}
+	rows := [][]string{
+		{"1050879735957", "小米 14|薄荷海", "【DYT彩银白色-DTY7958】", "1", "2026-06-28 10:00:00"},
+	}
+	result := ProcessData(rows, headers, engine)
+	got := result.FactoryOrders["打图工厂1"]
+	if len(got) != 1 {
+		t.Fatalf("rows = %d, want 1", len(got))
+	}
+	if got[0].OrderID != "" {
+		t.Errorf("无 订单编号 列时 OrderID 应为空, got %q", got[0].OrderID)
+	}
+}
+
 // ---- 买家留言 / 卖家备注 ----
 
 func TestProcessData_BuyerAndSellerNotesPassThrough(t *testing.T) {
@@ -292,7 +331,7 @@ func TestProcessData_MissingNoteColumns(t *testing.T) {
 }
 
 func TestWriteFactorySheet_HeadersIncludeNotes(t *testing.T) {
-	// 端到端：写 Excel 后读回来，验证表头包含 买家留言、卖家备注 两列
+	// 端到端：写 Excel 后读回来，验证表头包含 订单号、买家留言、卖家备注 等列
 	tmpDir := t.TempDir()
 	outPath := filepath.Join(tmpDir, "test.xlsx")
 
@@ -300,7 +339,7 @@ func TestWriteFactorySheet_HeadersIncludeNotes(t *testing.T) {
 	result := &Result{
 		FactoryOrders: map[string][]OutputRow{
 			"打图工厂1": {
-				{Code: "DTY7958", Model: "小米14", Material: "DYT彩银白色", Quantity: 1, Name: DefaultName, PaymentTime: "2026-06-28 10:00:00", BuyerNote: "留言A", SellerNote: "备注B"},
+				{Code: "DTY7958", Model: "小米14", Material: "DYT彩银白色", Quantity: 1, Name: DefaultName, OrderID: "4028857312345", PaymentTime: "2026-06-28 10:00:00", BuyerNote: "留言A", SellerNote: "备注B"},
 			},
 		},
 	}
@@ -318,7 +357,7 @@ func TestWriteFactorySheet_HeadersIncludeNotes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("读 sheet 失败: %v", err)
 	}
-	wantHeaders := []string{"序号", "编码", "手机型号", "素材", "数量", "姓名", "付款时间", "买家留言", "卖家备注"}
+	wantHeaders := []string{"订单号", "序号", "编码", "手机型号", "素材", "数量", "姓名", "付款时间", "买家留言", "卖家备注"}
 	if len(rows) < 1 {
 		t.Fatal("输出 sheet 为空")
 	}
@@ -331,15 +370,21 @@ func TestWriteFactorySheet_HeadersIncludeNotes(t *testing.T) {
 			t.Errorf("表头[%d] = %q, want %q", i, gotHeaders[i], h)
 		}
 	}
-	// 第二行的 H、I 列应该是买家留言、卖家备注
+	// 第二行的 A 列应为订单号，H、I、J 列应该是付款时间、买家留言、卖家备注
 	if len(rows) < 2 {
 		t.Fatal("无数据行")
 	}
-	if rows[1][7] != "留言A" {
-		t.Errorf("买家留言列 = %q, want %q", rows[1][7], "留言A")
+	if rows[1][0] != "4028857312345" {
+		t.Errorf("订单号列 = %q, want %q", rows[1][0], "4028857312345")
 	}
-	if rows[1][8] != "备注B" {
-		t.Errorf("卖家备注列 = %q, want %q", rows[1][8], "备注B")
+	if rows[1][7] != "2026-06-28 10:00:00" {
+		t.Errorf("付款时间列 = %q, want %q", rows[1][7], "2026-06-28 10:00:00")
+	}
+	if rows[1][8] != "留言A" {
+		t.Errorf("买家留言列 = %q, want %q", rows[1][8], "留言A")
+	}
+	if rows[1][9] != "备注B" {
+		t.Errorf("卖家备注列 = %q, want %q", rows[1][9], "备注B")
 	}
 }
 
