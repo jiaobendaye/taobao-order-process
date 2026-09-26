@@ -8,3 +8,4 @@ build/
 .playwright-mcp/
 docs/
 .agents/
+.omo
