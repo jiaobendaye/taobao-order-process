@@ -157,6 +157,7 @@ async function runFilter() {
     };
     const outputHeaders = ['店铺名称','订单编号','子订单编号','买家昵称','收件人姓名','收件人手机号','收件人详细地址','付款时间','买家留言','卖家备注','商品商家编码','商品规格','商品数量'];
     const sheets = [];
+    sheets.push({ name: '多疑单订单汇总', headers: ['订单编号'], rows: (data.orderSummary || []).map(orderID => [orderID]) });
     const addSheet = (name, items) => {
       if (items && items.length) {
         sheets.push({ name, headers: outputHeaders, rows: items.map(r => [
@@ -180,6 +181,37 @@ async function runFilter() {
 }
 
 // ---- Dangkou Processing ----
+function prepareDangkouDetail(headers, rows, mapping) {
+  const specIndex = headers.findIndex(h => String(h).trim().toLowerCase() === '商品规格');
+  const quantityIndex = headers.findIndex(h => String(h).trim().toLowerCase() === '商品数量');
+  const productIndex = headers.findIndex(h => String(h).trim().toLowerCase() === '商品id');
+  const columns = [];
+  headers.forEach((_header, index) => {
+    if (index !== specIndex) columns.push(index);
+    if (index === quantityIndex && specIndex >= 0) columns.push(specIndex);
+  });
+  if (quantityIndex < 0 && specIndex >= 0) columns.push(specIndex);
+
+  const outputHeaders = columns.map(index => headers[index]);
+  const outputRows = rows.map(row => columns.map(index => {
+    let value = row[index] ?? '';
+    if (index === specIndex) {
+      const parts = String(value).split(/\|(.*)/s).slice(0, 2);
+      let skuIndex = parts.length === 1 ? 0 : 1;
+      if (parts.length === 2) {
+        const productID = String(row[productIndex] ?? '').trim().toLowerCase();
+        const normalized = part => part.trim().replace(/(?:\[[^\]]*\]|【[^】]*】)\s*$/, '').trim().toLowerCase();
+        if (mapping[productID + '|' + normalized(parts[0])]) skuIndex = 0;
+        else if (!mapping[productID + '|' + normalized(parts[1])] && parts[0].includes('+') && !parts[1].includes('+')) skuIndex = 0;
+      }
+      parts[skuIndex] = parts[skuIndex].split('+', 1)[0];
+      value = parts.join('|');
+    }
+    return value;
+  }));
+  return { headers: outputHeaders, rows: outputRows };
+}
+
 async function runDangkou() {
   if (!state.orderFile) { UI.showError('dangkou', '请先选择订单 Excel 文件'); return; }
   if (!state.dangkouEngine) { UI.showError('dangkou', '请先上传自设编码文件（点击齿轮按钮）'); return; }
@@ -201,12 +233,26 @@ async function runDangkou() {
     const stallOrder = (state.dangkouEngine.stalls || []).map(s => s.name);
     const activeStalls = stallOrder.filter(n => data.stallOrders[n] && data.stallOrders[n].length);
     const sheets = [{ name: '汇总', headers: activeStalls, rows: buildSummaryRows(activeStalls, data.stallOrders, headers, '订单编号') }];
+    const orderIDIndex = headers.findIndex(h => String(h).trim().toLowerCase() === '订单编号');
+    const looseOrders = [];
+    for (const name of activeStalls) {
+      const ids = new Set();
+      for (const row of data.stallOrders[name]) {
+        const id = orderIDIndex >= 0 ? row[orderIDIndex] : '';
+        if (String(id ?? '').trim()) ids.add(id);
+      }
+      if (ids.size > 0 && ids.size < 4) {
+        for (const id of ids) looseOrders.push([id]);
+      }
+    }
+    sheets.push({ name: '散单', headers: ['订单编号'], rows: looseOrders });
+    const detail = rows => prepareDangkouDetail(headers, rows, engine.mapping);
     for (const name of stallOrder) {
       if (data.stallOrders[name] && data.stallOrders[name].length)
-        sheets.push({ name, headers, rows: data.stallOrders[name] });
+        sheets.push({ name, ...detail(data.stallOrders[name]) });
     }
-    if (data.unassigned && data.unassigned.length) sheets.push({ name: '未分配档口', headers, rows: data.unassigned });
-    if (data.noCodeMatch && data.noCodeMatch.length) sheets.push({ name: '无匹配自设编码', headers, rows: data.noCodeMatch });
+    if (data.unassigned && data.unassigned.length) sheets.push({ name: '未分配档口', ...detail(data.unassigned) });
+    if (data.noCodeMatch && data.noCodeMatch.length) sheets.push({ name: '无匹配自设编码', ...detail(data.noCodeMatch) });
 
     const baseName = state.orderFile.name.replace(/\.xlsx$/i, '');
     // 拿货档口 sheet：有订单的档口名按 '-' 拆解为 市场/档口号/档口名称，按市场排序

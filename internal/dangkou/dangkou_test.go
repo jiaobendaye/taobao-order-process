@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -12,15 +13,101 @@ import (
 	"taobao/internal/common"
 )
 
+func TestWriteOutputDetailSpecAfterQuantity(t *testing.T) {
+	headers := []string{"订单编号", "商品id", "商品规格", "商品数量", "店铺名称"}
+	rows := [][]string{
+		{"1", "123", "iPhone15|透明壳+支架", "2", "店铺"},
+		{"2", "123", "透明壳+支架|iPhone15", "1", "店铺"},
+		{"3", "123", "iPhone15|透明壳", "1", "店铺"},
+		{"4", "123", "iPhone+15|透明壳+支架", "1", "店铺"},
+	}
+	result := &Result{StallOrders: map[string][][]string{"档口A": {rows[0], rows[1], rows[3]}}, NoCodeMatch: rows[2:3]}
+	path := filepath.Join(t.TempDir(), "档口分配.xlsx")
+	if err := writeOutput(path, headers, &Engine{Mapping: map[string]string{"123|透明壳+支架": "A001"}, Stalls: []StallConfig{{Name: "档口A"}}}, result); err != nil {
+		t.Fatal(err)
+	}
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for _, tc := range []struct {
+		sheet string
+		want  [][]string
+	}{
+		{"档口A", [][]string{{"订单编号", "商品id", "商品数量", "商品规格", "店铺名称"},
+			{"1", "123", "2", "iPhone15|透明壳", "店铺"},
+			{"2", "123", "1", "透明壳|iPhone15", "店铺"},
+			{"4", "123", "1", "iPhone+15|透明壳", "店铺"}}},
+		{"无匹配自设编码", [][]string{{"订单编号", "商品id", "商品数量", "商品规格", "店铺名称"},
+			{"3", "123", "1", "iPhone15|透明壳", "店铺"}}},
+	} {
+		got, err := f.GetRows(tc.sheet)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s rows = %v, want %v", tc.sheet, got, tc.want)
+		}
+	}
+	if rows[0][2] != "iPhone15|透明壳+支架" {
+		t.Fatal("output mutated source rows")
+	}
+}
+
+func TestWriteOutputLooseOrders(t *testing.T) {
+	headers := []string{"订单编号", "商品id"}
+	orderRows := func(ids ...string) [][]string {
+		rows := make([][]string, 0, len(ids))
+		for _, id := range ids {
+			rows = append(rows, []string{id, "123"})
+		}
+		return rows
+	}
+	engine := &Engine{Stalls: []StallConfig{
+		{Name: "小档口A"}, {Name: "大档口"}, {Name: "小档口B"}, {Name: "空档口"},
+	}}
+	result := &Result{
+		StallOrders: map[string][][]string{
+			"小档口A": orderRows("001", "001", "002", "", "003"),
+			"大档口":  orderRows("101", "102", "103", "104"),
+			"小档口B": orderRows("002", "005"),
+		},
+		Unassigned:  orderRows("201"),
+		NoCodeMatch: orderRows("301"),
+	}
+	path := filepath.Join(t.TempDir(), "档口分配.xlsx")
+	if err := writeOutput(path, headers, engine, result); err != nil {
+		t.Fatal(err)
+	}
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	sheets := f.GetSheetList()
+	if len(sheets) < 2 || sheets[0] != "汇总" || sheets[1] != "散单" {
+		t.Fatalf("first sheets = %v, want 汇总 then 散单", sheets)
+	}
+	rows, err := f.GetRows("散单")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{{"订单编号"}, {"001"}, {"002"}, {"003"}, {"002"}, {"005"}}
+	if !reflect.DeepEqual(rows, want) {
+		t.Fatalf("散单 = %v, want %v", rows, want)
+	}
+}
+
 // ---- ParseStallName 测试 ----
 
 func TestParseStallName(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		wantMarket  string
-		wantNumber  string
-		wantStall   string
+		name       string
+		input      string
+		wantMarket string
+		wantNumber string
+		wantStall  string
 	}{
 		{"三段", "经济-4-国产哥GCG", "经济", "4", "国产哥GCG"},
 		{"两段", "经济-4", "经济", "4", ""},
@@ -43,9 +130,9 @@ func TestParseStallName(t *testing.T) {
 // TestParseSpec_StripsSpaces 验证 parseSpec 对型号去空格的行为
 func TestParseSpec_StripsSpaces(t *testing.T) {
 	cases := []struct {
-		spec         string
-		wantModel    string
-		wantSKU      string
+		spec      string
+		wantModel string
+		wantSKU   string
 	}{
 		{"iPhone 15 Pro|透明壳[黑色]", "iPhone15Pro", "透明壳"},
 		{"  Samsung S24  Ultra  | 硅胶壳 【蓝色】", "SamsungS24Ultra", "硅胶壳"},
@@ -93,18 +180,18 @@ func TestFindStall_ModelMatching(t *testing.T) {
 		model       string
 		wantStall   string
 	}{
-		{"A001", "iPhone15Pro", "档口A"},      // 型号匹配档口A
-		{"A001", "SamsungS24Ultra", "档口B"},   // 型号匹配档口B，跳过档口A
-		{"A001", "iPhone15ProMax", "档口A"},    // 型号匹配档口A（列表中第二个）
-		{"A001", "Pixel8", "档口B"},            // 型号匹配档口B（列表中第二个）
-		{"A001", "UnknownModel", ""},           // 型号不在任何档口的列表中
-		{"A001", "", "档口A"},                  // model 为空时，匹配第一个有该编码的档口
-		{"B999", "iPhone15Pro", ""},            // 编码不存在
+		{"A001", "iPhone15Pro", "档口A"},     // 型号匹配档口A
+		{"A001", "SamsungS24Ultra", "档口B"}, // 型号匹配档口B，跳过档口A
+		{"A001", "iPhone15ProMax", "档口A"},  // 型号匹配档口A（列表中第二个）
+		{"A001", "Pixel8", "档口B"},          // 型号匹配档口B（列表中第二个）
+		{"A001", "UnknownModel", ""},       // 型号不在任何档口的列表中
+		{"A001", "", "档口A"},                // model 为空时，匹配第一个有该编码的档口
+		{"B999", "iPhone15Pro", ""},        // 编码不存在
 		// 大小写不敏感
-		{"a001", "iphone15pro", "档口A"},       // 编码和型号全小写
-		{"A001", "IPHONE15PRO", "档口A"},       // 型号全大写
-		{"a001", "SamsungS24Ultra", "档口B"},   // 编码小写
-		{"A001", "pixel8", "档口B"},            // 型号小写
+		{"a001", "iphone15pro", "档口A"},     // 编码和型号全小写
+		{"A001", "IPHONE15PRO", "档口A"},     // 型号全大写
+		{"a001", "SamsungS24Ultra", "档口B"}, // 编码小写
+		{"A001", "pixel8", "档口B"},          // 型号小写
 	}
 
 	for _, tt := range tests {

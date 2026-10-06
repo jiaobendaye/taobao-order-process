@@ -374,6 +374,7 @@ func writeOutput(outputPath string, headers []string, engine *Engine, result *Re
 	// 收集汇总 sheet 所需数据
 	var summaryStalls []string     // 档口名（列头）
 	var summaryOrderIDs [][]string // 各档口的订单编号列表
+	var looseOrderIDs []string
 
 	type sheetData struct {
 		name string
@@ -389,7 +390,12 @@ func writeOutput(outputPath string, headers []string, engine *Engine, result *Re
 		}
 		detailSheets = append(detailSheets, sheetData{stall.Name, orders})
 		summaryStalls = append(summaryStalls, stall.Name)
-		summaryOrderIDs = append(summaryOrderIDs, extractColumn(orders, colOrderID))
+		orderIDs := extractColumn(orders, colOrderID)
+		summaryOrderIDs = append(summaryOrderIDs, orderIDs)
+		uniqueIDs := uniqueNonEmptyOrderIDs(orderIDs)
+		if len(uniqueIDs) > 0 && len(uniqueIDs) < 4 {
+			looseOrderIDs = append(looseOrderIDs, uniqueIDs...)
+		}
 	}
 
 	// 未分配档口
@@ -406,49 +412,102 @@ func writeOutput(outputPath string, headers []string, engine *Engine, result *Re
 		summaryOrderIDs = append(summaryOrderIDs, extractColumn(result.NoCodeMatch, colOrderID))
 	}
 
-	// 汇总 sheet 放第一个
+	// 汇总和散单放在明细前面
+	f.SetSheetName("Sheet1", "汇总")
 	if len(summaryStalls) > 0 {
-		f.SetSheetName("Sheet1", "汇总")
 		writeSummarySheet(f, "汇总", summaryStalls, summaryOrderIDs)
-		// 各明细 sheet 追加在后面
-		for _, sd := range detailSheets {
-			if _, err := f.NewSheet(sd.name); err != nil {
-				return err
-			}
-			writeSheet(f, sd.name, headers, sd.rows)
+	}
+	if _, err := f.NewSheet("散单"); err != nil {
+		return err
+	}
+	writeLooseOrdersSheet(f, looseOrderIDs)
+	for _, sd := range detailSheets {
+		if _, err := f.NewSheet(sd.name); err != nil {
+			return err
 		}
-	} else {
-		// 无汇总数据（不应发生），直接写明细
-		firstSheet := true
-		for _, sd := range detailSheets {
-			if firstSheet {
-				f.SetSheetName("Sheet1", sd.name)
-				writeSheet(f, sd.name, headers, sd.rows)
-				firstSheet = false
-			} else {
-				if _, err := f.NewSheet(sd.name); err != nil {
-					return err
-				}
-				writeSheet(f, sd.name, headers, sd.rows)
-			}
-		}
+		writeSheet(f, sd.name, headers, sd.rows, engine)
 	}
 
 	f.SetActiveSheet(0)
 	return f.SaveAs(outputPath)
 }
 
-func writeSheet(f *excelize.File, name string, headers []string, rows [][]string) {
-	for colIdx, h := range headers {
+func uniqueNonEmptyOrderIDs(orderIDs []string) []string {
+	seen := make(map[string]bool)
+	var unique []string
+	for _, id := range orderIDs {
+		if strings.TrimSpace(id) == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		unique = append(unique, id)
+	}
+	return unique
+}
+
+func writeLooseOrdersSheet(f *excelize.File, orderIDs []string) {
+	f.SetCellValue("散单", "A1", "订单编号")
+	for i, id := range orderIDs {
+		f.SetCellValue("散单", fmt.Sprintf("A%d", i+2), id)
+	}
+}
+
+func writeSheet(f *excelize.File, name string, headers []string, rows [][]string, engine *Engine) {
+	colSpec := common.FindColumn(headers, "商品规格")
+	colQty := common.FindColumn(headers, "商品数量")
+	colProductID := common.FindColumn(headers, "商品id")
+	columns := make([]int, 0, len(headers))
+	for i := range headers {
+		if i != colSpec {
+			columns = append(columns, i)
+		}
+		if i == colQty && colSpec >= 0 {
+			columns = append(columns, colSpec)
+		}
+	}
+	if colQty < 0 && colSpec >= 0 {
+		columns = append(columns, colSpec)
+	}
+	for colIdx, originalCol := range columns {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
-		f.SetCellValue(name, cell, h)
+		f.SetCellValue(name, cell, headers[originalCol])
 	}
 	for rowIdx, row := range rows {
-		for colIdx, val := range row {
+		for colIdx, originalCol := range columns {
+			if originalCol >= len(row) {
+				continue
+			}
+			val := row[originalCol]
+			if originalCol == colSpec {
+				productID := ""
+				if colProductID >= 0 && colProductID < len(row) {
+					productID = strings.TrimSpace(row[colProductID])
+				}
+				val = trimSpecAccessories(val, productID, engine)
+			}
 			cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowIdx+2)
 			f.SetCellValue(name, cell, val)
 		}
 	}
+}
+
+func trimSpecAccessories(spec, productID string, engine *Engine) string {
+	parts := strings.SplitN(spec, "|", 2)
+	skuIndex := 0
+	if len(parts) == 2 {
+		part1, part2 := common.SplitSpec(spec)
+		skuIndex = 1
+		if engine.LookupZisheBianma(productID, part1) != "" {
+			skuIndex = 0
+		} else if engine.LookupZisheBianma(productID, part2) == "" &&
+			strings.Contains(parts[0], "+") && !strings.Contains(parts[1], "+") {
+			skuIndex = 0
+		}
+	}
+	if before, _, found := strings.Cut(parts[skuIndex], "+"); found {
+		parts[skuIndex] = before
+	}
+	return strings.Join(parts, "|")
 }
 
 // extractColumn 提取所有行中指定列的值

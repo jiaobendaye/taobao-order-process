@@ -2,7 +2,100 @@
 // 运行：node --test web/
 const { test } = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
+const vm = require('node:vm');
 const { cleanAccessoryName, parsePeijianConfigSheet } = require('./app.js');
+
+test('runFilter: 下载的第一页是去重订单号汇总', async () => {
+  let downloaded;
+  let download;
+  const context = {
+    Excel: {
+      read: async () => ({ headers: ['订单编号'], rows: [['multi']] }),
+      download: sheets => { downloaded = sheets; },
+    },
+    Config: { getFilterConfig: () => ({ doubtKeywords: [], accessoryKeywords: [] }) },
+    WasmBridge: { filterProcess: () => ({
+      orderSummary: ['multi', 'doubt', 'accessory'],
+      multiOrders: [], doubtfulOrders: [], accessoryRows: [], normalOrders: [],
+      summary: { multiOrders: 0, doubtfulOrders: 0, accessoryRows: 0, normalOrders: 0, total: 0 },
+    }) },
+    UI: {
+      setProcessing() {}, showSpinner() {}, hideSpinner() {}, showError(e) { throw e; },
+      showResult(_tool, _summary, callback) { if (callback) download = callback; },
+    },
+  };
+  vm.runInNewContext(fs.readFileSync(require.resolve('./app.js'), 'utf8') +
+    '\nstate.orderFile = { name: "orders.xlsx" }; runFilter();', context);
+  await new Promise(resolve => setImmediate(resolve));
+  download();
+  assert.strictEqual(downloaded[0].name, '多疑单订单汇总');
+  assert.strictEqual(Array.from(downloaded[0].headers).join(','), '订单编号');
+  assert.deepStrictEqual(Array.from(downloaded[0].rows, row => Array.from(row)),
+    [['multi'], ['doubt'], ['accessory']]);
+});
+
+test('runDangkou: detail sheets move spec after quantity and trim accessory suffix', async () => {
+  let downloaded;
+  let download;
+  const headers = ['订单编号', '商品id', '商品规格', '商品数量', '店铺名称'];
+  const orders = [['1', '123', 'iPhone15|透明壳+支架', '2', '店铺'],
+    ['2', '123', '透明壳+支架|iPhone15', '1', '店铺'],
+    ['3', '123', 'iPhone+15|透明壳+支架', '1', '店铺']];
+  const context = {
+    Excel: {
+      read: async () => ({ headers, rows: orders }),
+      download: sheets => { downloaded = sheets; },
+    },
+    WasmBridge: { dangkouProcess: () => ({
+      stallOrders: { '档口A': orders }, noCodeMatch: [orders[0]], unassigned: [orders[1]],
+    }) },
+    UI: {
+      setProcessing() {}, showSpinner() {}, hideSpinner() {}, showError(e) { throw e; },
+      showResult(_tool, _summary, callback) { if (callback) download = callback; },
+    },
+  };
+  vm.runInNewContext(fs.readFileSync(require.resolve('./app.js'), 'utf8') +
+    '\nstate.orderFile = { name: "orders.xlsx" }; state.dangkouEngine = { mapping: { "123|透明壳+支架": "A001" }, stalls: [{ name: "档口A" }] }; runDangkou();', context);
+  await new Promise(resolve => setImmediate(resolve));
+  download();
+  for (const [name, expected] of [
+    ['档口A', [['1', '123', '2', 'iPhone15|透明壳', '店铺'], ['2', '123', '1', '透明壳|iPhone15', '店铺'], ['3', '123', '1', 'iPhone+15|透明壳', '店铺']]],
+    ['未分配档口', [['2', '123', '1', '透明壳|iPhone15', '店铺']]],
+    ['无匹配自设编码', [['1', '123', '2', 'iPhone15|透明壳', '店铺']]],
+  ]) {
+    const sheet = downloaded.find(s => s.name === name);
+    assert.deepStrictEqual(Array.from(sheet.headers), ['订单编号', '商品id', '商品数量', '商品规格', '店铺名称']);
+    assert.deepStrictEqual(Array.from(sheet.rows, row => Array.from(row)), expected);
+  }
+  assert.strictEqual(orders[0][2], 'iPhone15|透明壳+支架');
+});
+
+test('runDangkou: loose orders page counts unique order IDs per stall', async () => {
+  const headers = ['订单编号', '商品id'];
+  const makeRows = ids => ids.map(id => [id, '123']);
+  const stallOrders = {
+    smallA: makeRows(['001', '001', '002', '', '003']),
+    large: makeRows(['101', '102', '103', '104']),
+    smallB: makeRows(['002', '005']),
+  };
+  let sheets;
+  let download;
+  const context = {
+    Excel: { read: async () => ({ headers, rows: [] }), download: output => { sheets = output; } },
+    WasmBridge: { dangkouProcess: () => ({ stallOrders, unassigned: makeRows(['201']), noCodeMatch: makeRows(['301']) }) },
+    UI: { setProcessing() {}, showSpinner() {}, hideSpinner() {}, showError(e) { throw e; },
+      showResult(_tool, _summary, callback) { if (callback) download = callback; } },
+  };
+  vm.runInNewContext(fs.readFileSync(require.resolve('./app.js'), 'utf8') +
+    '\nstate.orderFile = { name: "orders.xlsx" }; state.dangkouEngine = { mapping: {}, stalls: [{name: "smallA"}, {name: "large"}, {name: "smallB"}, {name: "empty"}] }; runDangkou();', context);
+  await new Promise(resolve => setImmediate(resolve));
+  download();
+  assert.deepStrictEqual(Array.from(sheets.slice(0, 2), s => s.name), ['汇总', '散单']);
+  assert.deepStrictEqual(Array.from(sheets[1].headers), ['订单编号']);
+  assert.deepStrictEqual(Array.from(sheets[1].rows, row => Array.from(row)),
+    [['001'], ['002'], ['003'], ['002'], ['005']]);
+});
 
 test('cleanAccessoryName: 去「单独」前缀 + 「不含壳」尾注', () => {
   const cases = [

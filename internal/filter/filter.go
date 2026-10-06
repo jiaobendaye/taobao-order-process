@@ -120,6 +120,7 @@ type Result struct {
 	DoubtfulOrders []RowData `json:"doubtfulOrders"`
 	NormalOrders   []RowData `json:"normalOrders"`
 	AccessoryRows  []RowData `json:"accessoryRows"`
+	OrderSummary   []string  `json:"orderSummary"`
 	OutputDir      string    `json:"outputDir"`
 	Summary        Summary   `json:"summary"`
 }
@@ -317,6 +318,19 @@ func ProcessData(rows []RowData, cfg *Config) *Result {
 	result.Summary.DoubtfulOrders = len(result.DoubtfulOrders)
 	result.Summary.NormalOrders = len(result.NormalOrders)
 	result.Summary.AccessoryRows = len(result.AccessoryRows)
+	seenOrders := make(map[string]struct{})
+	for _, group := range [][]RowData{result.MultiOrders, result.DoubtfulOrders, result.AccessoryRows} {
+		for _, row := range group {
+			if row.OrderID == "" {
+				continue
+			}
+			if _, seen := seenOrders[row.OrderID]; seen {
+				continue
+			}
+			seenOrders[row.OrderID] = struct{}{}
+			result.OrderSummary = append(result.OrderSummary, row.OrderID)
+		}
+	}
 
 	return result
 }
@@ -391,7 +405,9 @@ func writeOutput(filename string, result *Result) error {
 	f := excelize.NewFile()
 	defer f.Close()
 
-	f.SetSheetName("Sheet1", "多件订单")
+	f.SetSheetName("Sheet1", "多疑单订单汇总")
+	writeOrderSummarySheet(f, "多疑单订单汇总", result.OrderSummary)
+	f.NewSheet("多件订单")
 	writeSheet(f, "多件订单", result.MultiOrders)
 
 	createSheet(f, "疑难单", result.DoubtfulOrders)
@@ -399,6 +415,13 @@ func writeOutput(filename string, result *Result) error {
 	createSheetWithGrouping(f, "正常手机壳", result.NormalOrders)
 
 	return f.SaveAs(filename)
+}
+
+func writeOrderSummarySheet(f *excelize.File, name string, orderIDs []string) {
+	f.SetCellValue(name, "A1", "订单编号")
+	for i, orderID := range orderIDs {
+		f.SetCellValue(name, fmt.Sprintf("A%d", i+2), orderID)
+	}
 }
 
 func writeSheet(f *excelize.File, name string, rows []RowData) {
