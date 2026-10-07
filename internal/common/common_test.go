@@ -3,8 +3,28 @@ package common
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestValidateOrderIDs(t *testing.T) {
+	rows := [][]string{
+		{"店铺", "订单编号", "商品"},
+		{"店铺A", "1234567890123456789", "壳"},
+		{"", "", "支架"},
+	}
+	if err := ValidateOrderIDs(rows); err != nil {
+		t.Fatalf("valid orders: %v", err)
+	}
+	rows = append(rows, []string{"店铺B", "1234567890123456789,9876543210987654321", "壳"})
+	if err := ValidateOrderIDs(rows); err == nil || !strings.Contains(err.Error(), "第4行") || !strings.Contains(err.Error(), "订单编号") {
+		t.Fatalf("expected row 4 order ID error, got %v", err)
+	}
+	rows[3][1] = "1234567890123456789，9876543210987654321"
+	if err := ValidateOrderIDs(rows); err == nil || !strings.Contains(err.Error(), "第4行") {
+		t.Fatalf("expected full-width comma error, got %v", err)
+	}
+}
 
 func TestFindColumn(t *testing.T) {
 	headers := []string{" 店铺名称 ", "订单编号", "商品id", "商品规格"}
@@ -101,7 +121,7 @@ func TestParseSpec(t *testing.T) {
 
 func TestSplitSpec(t *testing.T) {
 	tests := []struct {
-		spec     string
+		spec      string
 		wantPart1 string
 		wantPart2 string
 	}{

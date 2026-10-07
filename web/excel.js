@@ -4,14 +4,18 @@ const Excel = {
   // 读取 Excel 文件，返回 { headers: [], rows: [[],[]...] }
   // raw: false 让 SheetJS 返回格式化文本，避免大数字（商品ID）精度丢失
   async read(file) {
+    if (/\.xls$/i.test(file.name)) {
+      throw new Error('订单文件为旧版 .xls 格式，请先用 WPS/Excel 另存为 .xlsx 再处理');
+    }
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data, { type: 'array' });
     const sheet = wb.Sheets[wb.SheetNames[0]];
     const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
     if (json.length < 2) throw new Error('数据行不足');
+    const normalized = WasmBridge.normalizeOrderRows(json.map(r => r.map(c => String(c))));
     return {
-      headers: json[0].map(h => String(h)),
-      rows: json.slice(1).map(r => r.map(c => String(c)))
+      headers: normalized[0],
+      rows: normalized.slice(1)
     };
   },
 

@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/xuri/excelize/v2"
+	"taobao/internal/common"
 )
 
 // Config 筛选配置
@@ -112,6 +113,7 @@ type RowData struct {
 	Code            string `xlsx:"商品商家编码"`
 	Spec            string `xlsx:"商品规格"`
 	Quantity        int    `xlsx:"商品数量"`
+	MultiItem       bool   `xlsx:"订单组多件"`
 }
 
 // Result 筛选结果
@@ -168,6 +170,8 @@ func scanRow(data []string, mapper *fieldMapper) *RowData {
 			if f.CanSet() {
 				val := data[colIdx]
 				switch f.Kind() {
+				case reflect.Bool:
+					f.SetBool(val == "1")
 				case reflect.Int:
 					if qty, err := strconv.Atoi(val); err == nil {
 						f.SetInt(int64(qty))
@@ -189,13 +193,16 @@ func isMultiOrder(row *RowData) bool {
 
 // recipientKey 生成收件人复合键（买家昵称 + 三个收件人信息）
 func recipientKey(row *RowData) string {
+	if row.BuyerNick == "" && row.ReceiverName == "" && row.ReceiverPhone == "" && row.ReceiverAddress == "" {
+		return ""
+	}
 	return row.BuyerNick + "|" + row.ReceiverName + "|" + row.ReceiverPhone + "|" + row.ReceiverAddress
 }
 
 // isRecipientMulti 判断该行是否属于收件人信息相同的多件订单组
 func isRecipientMulti(row *RowData, multiCount map[string]int) bool {
 	key := recipientKey(row)
-	return key != "||||" && multiCount[key] > 1
+	return key != "" && multiCount[key] > 1
 }
 
 func isDoubtful(row *RowData, cfg *Config) bool {
@@ -267,7 +274,7 @@ func ProcessData(rows []RowData, cfg *Config) *Result {
 	recipientCount := make(map[string]int)
 	for i := range rows {
 		key := recipientKey(&rows[i])
-		if key != "||||" {
+		if key != "" {
 			recipientCount[key]++
 		}
 	}
@@ -275,7 +282,7 @@ func ProcessData(rows []RowData, cfg *Config) *Result {
 	for _, row := range rows {
 		if isDoubtful(&row, cfg) {
 			result.DoubtfulOrders = append(result.DoubtfulOrders, row)
-		} else if isMultiOrder(&row) || isRecipientMulti(&row, recipientCount) {
+		} else if row.MultiItem || isMultiOrder(&row) || isRecipientMulti(&row, recipientCount) {
 			result.MultiOrders = append(result.MultiOrders, row)
 		} else if isAccessoryOnly(&row, cfg) {
 			result.AccessoryRows = append(result.AccessoryRows, row)
@@ -338,8 +345,10 @@ func ProcessData(rows []RowData, cfg *Config) *Result {
 // ParseRows 将 2D 字符串数组（表头+数据行）解析为 []RowData。
 // 此函数替代 readExcel 的解析部分，供 Wasm 调用时使用。
 func ParseRows(rows [][]string) ([]RowData, error) {
-	if len(rows) < 2 {
-		return nil, fmt.Errorf("数据行不足")
+	var err error
+	rows, err = common.NormalizeOrderRows(rows)
+	if err != nil {
+		return nil, err
 	}
 
 	mapper := newFieldMapper(&RowData{})
@@ -366,39 +375,11 @@ func ParseRows(rows [][]string) ([]RowData, error) {
 // ---- Excel 读写 ----
 
 func readExcel(filename string) ([]RowData, error) {
-	f, err := excelize.OpenFile(filename)
+	rows, err := common.ReadOrderRows(filename)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-
-	rows, err := f.GetRows(f.GetSheetList()[0])
-	if err != nil {
-		return nil, err
-	}
-	if len(rows) < 2 {
-		return nil, fmt.Errorf("数据行不足")
-	}
-
-	mapper := newFieldMapper(&RowData{})
-	for colIdx, header := range rows[0] {
-		for tag, fieldIdx := range mapper.headerToFieldIdx {
-			if strings.EqualFold(strings.TrimSpace(header), tag) {
-				mapper.colToFieldIdx[colIdx] = fieldIdx
-				break
-			}
-		}
-	}
-
-	var result []RowData
-	for i := 1; i < len(rows); i++ {
-		row := scanRow(rows[i], mapper)
-		if row.Code == "" {
-			row.Code = "未知"
-		}
-		result = append(result, *row)
-	}
-	return result, nil
+	return ParseRows(rows)
 }
 
 func writeOutput(filename string, result *Result) error {

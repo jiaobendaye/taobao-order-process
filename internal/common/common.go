@@ -24,6 +24,27 @@ func FindColumn(headers []string, name string) int {
 	return -1
 }
 
+// ValidateOrderIDs 拒绝在单个订单编号单元格中填写多个编号。
+// rows 包含表头，因此错误行号与 Excel 行号一致。
+func ValidateOrderIDs(rows [][]string) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	col := FindColumn(rows[0], "订单编号")
+	if col < 0 {
+		col = FindColumn(rows[0], "订单号")
+	}
+	if col < 0 {
+		return nil
+	}
+	for i, row := range rows[1:] {
+		if col < len(row) && strings.ContainsAny(row[col], ",，") {
+			return fmt.Errorf("第%d行的订单编号包含多个编号，请修正后重试", i+2)
+		}
+	}
+	return nil
+}
+
 // GetCellValueSafe 安全读取单元格值（处理合并单元格等情况）
 func GetCellValueSafe(f *excelize.File, sheet, cell string) string {
 	v, err := f.GetCellValue(sheet, cell)

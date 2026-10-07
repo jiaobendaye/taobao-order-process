@@ -212,34 +212,10 @@ func Process(filename, configPath string) (*Result, error) {
 		return nil, err
 	}
 
-	f, err := excelize.OpenFile(filename)
-	if err != nil {
-		return nil, fmt.Errorf("打开订单文件失败: %w", err)
-	}
-	defer f.Close()
-
-	sheetName := f.GetSheetList()[0]
-	allRows, err := f.GetRows(sheetName)
-	if err != nil {
-		return nil, fmt.Errorf("读取订单Sheet失败: %w", err)
-	}
-	if len(allRows) < 2 {
-		return nil, fmt.Errorf("订单数据行不足")
-	}
-
+	allRows, err := common.ReadOrderRows(filename)
+	if err != nil { return nil, err }
 	headers := allRows[0]
-	// 用 GetCellValue 修正商品ID列
-	colProductID := common.FindColumn(headers, "商品id")
 	dataRows := allRows[1:]
-	if colProductID >= 0 {
-		for i := range dataRows {
-			cell, _ := excelize.CoordinatesToCellName(colProductID+1, i+2)
-			pid := strings.TrimSpace(common.GetCellValueSafe(f, sheetName, cell))
-			if pid != "" && colProductID < len(dataRows[i]) {
-				dataRows[i][colProductID] = pid
-			}
-		}
-	}
 
 	result := ProcessData(dataRows, headers, engine)
 
@@ -480,8 +456,8 @@ func writeStallSheet(out *excelize.File, sheetName string, engine *Engine, rows 
 			Extension: ext,
 			File:      item.ImageBytes,
 			Format: &excelize.GraphicOptions{
-				ScaleX: scaleX,
-				ScaleY: scaleY,
+				ScaleX:  scaleX,
+				ScaleY:  scaleY,
 				OffsetX: 5,
 				OffsetY: 5,
 			},

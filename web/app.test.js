@@ -35,6 +35,23 @@ test('runFilter: 下载的第一页是去重订单号汇总', async () => {
     [['multi'], ['doubt'], ['accessory']]);
 });
 
+test('runFilter: XLS input uses base name without extension', async () => {
+  let filename;
+  let download;
+  const context = {
+    Excel: { read: async () => ({ headers: ['订单编号'], rows: [['123']] }), download: (_sheets, name) => { filename = name; } },
+    Config: { getFilterConfig: () => ({ doubtKeywords: [], accessoryKeywords: [] }) },
+    WasmBridge: { filterProcess: () => ({ summary: { multiOrders: 0, doubtfulOrders: 0, normalOrders: 0, accessoryRows: 0, total: 1 } }) },
+    UI: { setProcessing() {}, showSpinner() {}, hideSpinner() {}, showError(e) { throw e; },
+      showResult(_tool, _summary, callback) { download = callback; } },
+  };
+  vm.runInNewContext(fs.readFileSync(require.resolve('./app.js'), 'utf8') +
+    '\nstate.orderFile = { name: "orders.xls" }; runFilter();', context);
+  await new Promise(resolve => setImmediate(resolve));
+  download();
+  assert.strictEqual(filename, 'orders_筛选结果.xlsx');
+});
+
 test('runDangkou: detail sheets move spec after quantity and trim accessory suffix', async () => {
   let downloaded;
   let download;

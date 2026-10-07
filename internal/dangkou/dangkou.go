@@ -246,39 +246,16 @@ func Process(filename, configPath string) (*Result, error) {
 		return nil, err
 	}
 
-	// 打开订单文件
-	f, err := excelize.OpenFile(filename)
+	allRows, err := common.ReadOrderRows(filename)
 	if err != nil {
-		return nil, fmt.Errorf("打开订单文件失败: %w", err)
+		return nil, err
 	}
-	defer f.Close()
-
-	allRows, err := f.GetRows(f.GetSheetList()[0])
-	if err != nil {
-		return nil, fmt.Errorf("读取订单Sheet失败: %w", err)
-	}
-	if len(allRows) < 2 {
-		return nil, fmt.Errorf("订单数据行不足")
-	}
-
 	headers := allRows[0]
-	sheetName := f.GetSheetList()[0]
-
-	// 找商品ID列用于 GetCellValue 读取
 	colProductID := common.FindColumn(headers, "商品id")
 	if colProductID < 0 {
 		return nil, fmt.Errorf("未找到「商品id」列")
 	}
-
-	// 用 GetCellValue 修正每行的商品ID（避免科学计数法）
 	dataRows := allRows[1:]
-	for i := range dataRows {
-		productIDCell, _ := excelize.CoordinatesToCellName(colProductID+1, i+2) // +2: header + 1-based
-		productID := strings.TrimSpace(common.GetCellValueSafe(f, sheetName, productIDCell))
-		if productID != "" && colProductID < len(dataRows[i]) {
-			dataRows[i][colProductID] = productID
-		}
-	}
 
 	result := ProcessData(dataRows, headers, engine)
 

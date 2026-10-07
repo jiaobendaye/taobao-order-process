@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"syscall/js"
 
+	"taobao/internal/common"
 	"taobao/internal/dangkou"
 	"taobao/internal/datu"
 	"taobao/internal/filter"
@@ -15,6 +16,17 @@ import (
 )
 
 // ---- Filter ----
+
+func normalizeOrderRows(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 { return mustMarshal(struct{ Error string `json:"error"` }{Error: "缺少订单数据"}) }
+	var input struct{ Rows [][]string `json:"rows"` }
+	if err := json.Unmarshal([]byte(args[0].String()), &input); err != nil {
+		return mustMarshal(struct{ Error string `json:"error"` }{Error: err.Error()})
+	}
+	rows, err := common.NormalizeOrderRows(input.Rows)
+	if err != nil { return mustMarshal(struct{ Error string `json:"error"` }{Error: err.Error()}) }
+	return mustMarshal(struct{ Data [][]string `json:"data"` }{Data: rows})
+}
 
 type filterArgs struct {
 	Rows [][]string    `json:"rows"`
@@ -48,9 +60,9 @@ func filterProcess(this js.Value, args []js.Value) interface{} {
 // ---- Dangkou ----
 
 type dangkouArgs struct {
-	Rows      [][]string           `json:"rows"`
-	Headers   []string             `json:"headers"`
-	EngineJSON dangkouEngineJSON   `json:"engine"`
+	Rows       [][]string        `json:"rows"`
+	Headers    []string          `json:"headers"`
+	EngineJSON dangkouEngineJSON `json:"engine"`
 }
 
 type dangkouResult struct {
@@ -67,17 +79,21 @@ func dangkouProcess(this js.Value, args []js.Value) interface{} {
 		return mustMarshal(dangkouResult{Error: fmt.Sprintf("dangkouProcess: invalid JSON: %v", err)})
 	}
 
+	allRows, err := common.NormalizeOrderRows(append([][]string{a.Headers}, a.Rows...))
+	if err != nil {
+		return mustMarshal(dangkouResult{Error: err.Error()})
+	}
 	engine := a.EngineJSON.toEngine()
-	data := dangkou.ProcessData(a.Rows, a.Headers, engine)
+	data := dangkou.ProcessData(allRows[1:], allRows[0], engine)
 	return mustMarshal(dangkouResult{Data: data})
 }
 
 // ---- Peijian ----
 
 type peijianArgs struct {
-	Rows       [][]string         `json:"rows"`
-	Headers    []string           `json:"headers"`
-	EngineJSON peijianEngineJSON  `json:"engine"`
+	Rows       [][]string        `json:"rows"`
+	Headers    []string          `json:"headers"`
+	EngineJSON peijianEngineJSON `json:"engine"`
 }
 
 type peijianResult struct {
@@ -94,17 +110,21 @@ func peijianProcess(this js.Value, args []js.Value) interface{} {
 		return mustMarshal(peijianResult{Error: fmt.Sprintf("peijianProcess: invalid JSON: %v", err)})
 	}
 
+	allRows, err := common.NormalizeOrderRows(append([][]string{a.Headers}, a.Rows...))
+	if err != nil {
+		return mustMarshal(peijianResult{Error: err.Error()})
+	}
 	engine := a.EngineJSON.toEngine()
-	data := peijian.ProcessData(a.Rows, a.Headers, engine)
+	data := peijian.ProcessData(allRows[1:], allRows[0], engine)
 	return mustMarshal(peijianResult{Data: data})
 }
 
 // ---- Datu ----
 
 type datuArgs struct {
-	Rows       [][]string         `json:"rows"`
-	Headers    []string           `json:"headers"`
-	EngineJSON datuEngineJSON     `json:"engine"`
+	Rows       [][]string     `json:"rows"`
+	Headers    []string       `json:"headers"`
+	EngineJSON datuEngineJSON `json:"engine"`
 }
 
 type datuResult struct {
@@ -121,8 +141,12 @@ func datuProcess(this js.Value, args []js.Value) interface{} {
 		return mustMarshal(datuResult{Error: fmt.Sprintf("datuProcess: invalid JSON: %v", err)})
 	}
 
+	allRows, err := common.NormalizeOrderRows(append([][]string{a.Headers}, a.Rows...))
+	if err != nil {
+		return mustMarshal(datuResult{Error: err.Error()})
+	}
 	engine := a.EngineJSON.toEngine()
-	data := datu.ProcessData(a.Rows, a.Headers, engine)
+	data := datu.ProcessData(allRows[1:], allRows[0], engine)
 	return mustMarshal(datuResult{Data: data})
 }
 
@@ -148,8 +172,12 @@ func pizhiProcess(this js.Value, args []js.Value) interface{} {
 		return mustMarshal(pizhiResult{Error: fmt.Sprintf("pizhiProcess: invalid JSON: %v", err)})
 	}
 
+	allRows, err := common.NormalizeOrderRows(append([][]string{a.Headers}, a.Rows...))
+	if err != nil {
+		return mustMarshal(pizhiResult{Error: err.Error()})
+	}
 	engine := a.EngineJSON.toEngine()
-	data := pizhi.ProcessData(a.Rows, a.Headers, engine)
+	data := pizhi.ProcessData(allRows[1:], allRows[0], engine)
 	return mustMarshal(pizhiResult{Data: data})
 }
 

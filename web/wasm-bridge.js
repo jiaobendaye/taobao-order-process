@@ -37,6 +37,10 @@ const WasmBridge = {
   },
 
   // ---- 各工具处理调用 ----
+  normalizeOrderRows(rows) {
+    return this.call('goNormalizeOrderRows', { rows });
+  },
+
   filterProcess(rows, config) {
     return this.call('goFilterProcess', { rows, config });
   },

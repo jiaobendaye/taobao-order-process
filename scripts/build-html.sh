@@ -19,6 +19,10 @@ done
 [ -f "$WASM_FILE" ] || { echo "错误: 请先运行 GOOS=js GOARCH=wasm go build -o $WASM_FILE ./wasm/"; exit 1; }
 [ -f "$WASM_EXEC_JS" ] || { echo "错误: 找不到 wasm_exec.js: $WASM_EXEC_JS"; exit 1; }
 
+# hucre 图片组件（皮质壳功能用，本地 vendor 不依赖 CDN）
+HUCRE_FILE="$WEB_DIR/vendor/hucre-xlsx.js"
+[ -f "$HUCRE_FILE" ] || { echo "错误: 找不到 $HUCRE_FILE"; exit 1; }
+
 echo "=== 打包单 HTML 文件 ==="
 
 # 使用 Python 进行字符串替换（bash 处理大字符串有问题）
@@ -38,6 +42,11 @@ html = html.replace("__CSS__", css)
 with open("$WASM_EXEC_JS", "r") as f:
     wasm_exec = f.read()
 html = html.replace("__WASM_EXEC_JS__", wasm_exec)
+
+# 内联 hucre 图片组件
+with open("$HUCRE_FILE", "r") as f:
+    hucre_js = f.read()
+html = html.replace("__HUCRE_JS__", hucre_js)
 
 # 内联 JS 文件（按依赖顺序）
 js_files = ["$WEB_DIR/excel.js", "$WEB_DIR/config.js", "$WEB_DIR/wasm-bridge.js", "$WEB_DIR/ui.js", "$WEB_DIR/app.js"]

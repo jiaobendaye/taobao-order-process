@@ -22,6 +22,7 @@ func main() {
 
 	// 注册全局 JS 函数
 	js.Global().Set("goFilterProcess", js.FuncOf(filterProcess))
+	js.Global().Set("goNormalizeOrderRows", js.FuncOf(normalizeOrderRows))
 	js.Global().Set("goDangkouProcess", js.FuncOf(dangkouProcess))
 	js.Global().Set("goPeijianProcess", js.FuncOf(peijianProcess))
 	js.Global().Set("goDatuProcess", js.FuncOf(datuProcess))

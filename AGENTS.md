@@ -176,7 +176,7 @@ phonecase-tools datu    <订单Excel文件> <打图工厂配置表.xlsx>
 ### 浏览器版（wasm + web）
 - `wasm/main.go` 在 JS 全局注册 `goFilterProcess`、`goDangkouProcess`、`goPeijianProcess`、`goDatuProcess`、`goPizhiProcess`，加载完成后调用 `onWasmReady`
 - 入参和出参都是 JSON（`{rows, headers, engine}` / `{data, error}`）。**配置 Excel 在 JS 侧解析**（`web/app.js` 的 `parse<Module>ConfigSheet`），生成 engine JSON 后，由 `wasm/engine_json.go` 转成各模块的 `Engine`，再调用 `ProcessData`
-- 读写 Excel 用 SheetJS（CDN）。读取时设 `raw: false`，避免商品ID 精度丢失。皮质壳配置要提取嵌入图片，改用 `hucre`（`esm.sh` 动态 import）
+- 读写 Excel 用 SheetJS（CDN）。读取时设 `raw: false`，避免商品ID 精度丢失。皮质壳配置要提取嵌入图片，改用 `hucre`：打包时由 esbuild 从 npm 包打成 IIFE 存在 `web/vendor/hucre-xlsx.js`，随单 HTML 内联为全局 `Hucre`，运行时不再请求 CDN
 - 配置持久化：filter 和 datu 的配置较小，存 `localStorage`；dangkou、peijian、pizhi 的配置较大，只放内存，刷新页面后要重新上传
 - **改了模块的 Engine 结构或配置格式，要同步修改 `wasm/engine_json.go` 和 `web/app.js` 里的解析逻辑**
 - `make wasm` 先编译 wasm，再用 `scripts/build-html.sh`（内含 Python）把 CSS、JS、`wasm_exec.js`、base64 编码的 wasm 内联进 `web/index.html` 模板，生成 `build/bin/phonecase-tools.html`

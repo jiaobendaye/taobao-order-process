@@ -156,7 +156,9 @@ func (e *Engine) LookupFactory(productID string) string {
 //
 // 当存在多个 【...】 时，只取最后一个 【...】 进行解析。
 // 符合: 【DYT彩银白色-DTY7958】 -> ("DYT彩银白色", "DTY7958")
-//       【PH仓】【DYT彩银白色-DTY7958】 -> ("DYT彩银白色", "DTY7958")
+//
+//	【PH仓】【DYT彩银白色-DTY7958】 -> ("DYT彩银白色", "DTY7958")
+//
 // 不符合 (如 【PH皮质】 / 【DTY彩银白色DTY7958】 / 空字符串) -> ("", "")
 func ParseDatuCode(s string) (material, code string) {
 	s = strings.TrimSpace(s)
@@ -190,34 +192,10 @@ func Process(filename, configPath string) (*Result, error) {
 		return nil, err
 	}
 
-	f, err := excelize.OpenFile(filename)
-	if err != nil {
-		return nil, fmt.Errorf("打开订单文件失败: %w", err)
-	}
-	defer f.Close()
-
-	sheetName := f.GetSheetList()[0]
-	allRows, err := f.GetRows(sheetName)
-	if err != nil {
-		return nil, fmt.Errorf("读取订单Sheet失败: %w", err)
-	}
-	if len(allRows) < 2 {
-		return nil, fmt.Errorf("订单数据行不足")
-	}
-
+	allRows, err := common.ReadOrderRows(filename)
+	if err != nil { return nil, err }
 	headers := allRows[0]
-	// 用 GetCellValue 修正商品ID列
-	colProductID := common.FindColumn(headers, "商品id")
 	dataRows := allRows[1:]
-	if colProductID >= 0 {
-		for i := range dataRows {
-			cell, _ := excelize.CoordinatesToCellName(colProductID+1, i+2)
-			pid := strings.TrimSpace(common.GetCellValueSafe(f, sheetName, cell))
-			if pid != "" && colProductID < len(dataRows[i]) {
-				dataRows[i][colProductID] = pid
-			}
-		}
-	}
 
 	result := ProcessData(dataRows, headers, engine)
 

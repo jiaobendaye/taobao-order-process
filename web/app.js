@@ -170,7 +170,7 @@ async function runFilter() {
     addSheet('疑难单', data.doubtfulOrders);
     addSheet('单独配件', data.accessoryRows);
     addSheet('正常手机壳', data.normalOrders);
-    const baseName = state.orderFile.name.replace(/\.xlsx$/i, '');
+    const baseName = state.orderFile.name.replace(/\.(xlsx|xls)$/i, '');
     UI.showResult('filter', summary, () => Excel.download(sheets, baseName + '_筛选结果.xlsx'), '📥 下载' + baseName + '_筛选结果.xlsx');
   } catch (e) {
     UI.showError('filter', e.message);
@@ -254,7 +254,7 @@ async function runDangkou() {
     if (data.unassigned && data.unassigned.length) sheets.push({ name: '未分配档口', ...detail(data.unassigned) });
     if (data.noCodeMatch && data.noCodeMatch.length) sheets.push({ name: '无匹配自设编码', ...detail(data.noCodeMatch) });
 
-    const baseName = state.orderFile.name.replace(/\.xlsx$/i, '');
+    const baseName = state.orderFile.name.replace(/\.(xlsx|xls)$/i, '');
     // 拿货档口 sheet：有订单的档口名按 '-' 拆解为 市场/档口号/档口名称，按市场排序
     const nahuoStalls = stallOrder.filter(n => data.stallOrders[n] && data.stallOrders[n].length);
     const nahuoHeaders = ['产品数量', '产品图片', '市场', '档口号', '档口名称', '支付状态', '拿货备注'];
@@ -329,7 +329,7 @@ async function runPeijian() {
     if (data.unassigned && data.unassigned.length) sheets.push({ name: '未分配档口', headers, rows: data.unassigned });
     if (data.noMatch && data.noMatch.length) sheets.push({ name: '无匹配自设编码', headers, rows: data.noMatch });
 
-    const baseName = state.orderFile.name.replace(/\.xlsx$/i, '');
+    const baseName = state.orderFile.name.replace(/\.(xlsx|xls)$/i, '');
     UI.showResult('peijian', summary, () => Excel.download(sheets, baseName + '_配件分配.xlsx'), '📥 下载' + baseName + '_配件分配.xlsx');
   } catch (e) {
     UI.showError('peijian', e.message);
@@ -492,7 +492,7 @@ async function runDatu() {
       sheets.push({ name: factory, headers: outputHeaders, rows: outRows });
     }
 
-    const baseName = state.orderFile.name.replace(/\.xlsx$/i, '');
+    const baseName = state.orderFile.name.replace(/\.(xlsx|xls)$/i, '');
     UI.showResult('datu', summary, () => Excel.download(sheets, baseName + '_打图结果.xlsx'), '📥 下载' + baseName + '_打图结果.xlsx');
   } catch (e) {
     UI.showError('datu', e.message);
@@ -509,10 +509,15 @@ if (typeof module !== 'undefined' && module.exports) {
 
 // ---- Pizhi: parse config + run ----
 
-const HUCRE_URL = 'https://esm.sh/hucre@0.6.1/xlsx';
+// hucre 图片组件由打包脚本内联为全局 Hucre（web/vendor/hucre-xlsx.js）。
+// 不再从 esm.sh 动态加载：CDN 不可用会导致皮质壳功能整体失败。
+function getHucre() {
+  if (typeof Hucre !== 'undefined' && Hucre.readXlsx && Hucre.writeXlsx) return Hucre;
+  throw new Error('图片组件未加载，请运行 make wasm 重新生成 HTML 文件');
+}
 
 async function parsePizhiConfigSheet(file) {
-  const { readXlsx } = await import(HUCRE_URL);
+  const { readXlsx } = getHucre();
   const buf = new Uint8Array(await file.arrayBuffer());
   const wb = await readXlsx(buf);
 
@@ -588,7 +593,7 @@ async function runPizhi() {
     }
     summary['总订单'] = data.total || 0;
 
-    const { writeXlsx } = await import(HUCRE_URL);
+    const { writeXlsx } = getHucre();
     const pzImages = state.pizhiEngine.images;
     const sheets = [];
 
@@ -635,7 +640,7 @@ async function runPizhi() {
     }
 
     const outBuf = await writeXlsx({ sheets });
-    const baseName = state.orderFile.name.replace(/\.xlsx$/i, '');
+    const baseName = state.orderFile.name.replace(/\.(xlsx|xls)$/i, '');
     const blob = new Blob([outBuf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
     UI.showResult('pizhi', summary, () => {
