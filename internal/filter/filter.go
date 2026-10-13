@@ -110,7 +110,7 @@ type RowData struct {
 	PaymentTime     string `xlsx:"付款时间"`
 	BuyerMsg        string `xlsx:"买家留言"`
 	SellerNote      string `xlsx:"卖家备注"`
-	Code            string `xlsx:"商品商家编码"`
+	Code            string `xlsx:"商家编码"`
 	Spec            string `xlsx:"商品规格"`
 	Quantity        int    `xlsx:"商品数量"`
 	MultiItem       bool   `xlsx:"订单组多件"`
@@ -352,7 +352,11 @@ func ParseRows(rows [][]string) ([]RowData, error) {
 	}
 
 	mapper := newFieldMapper(&RowData{})
+	legacyCodeCol := -1
 	for colIdx, header := range rows[0] {
+		if strings.TrimSpace(header) == "商品规格商家编码" {
+			legacyCodeCol = colIdx
+		}
 		for tag, fieldIdx := range mapper.headerToFieldIdx {
 			if strings.EqualFold(strings.TrimSpace(header), tag) {
 				mapper.colToFieldIdx[colIdx] = fieldIdx
@@ -364,6 +368,10 @@ func ParseRows(rows [][]string) ([]RowData, error) {
 	var result []RowData
 	for i := 1; i < len(rows); i++ {
 		row := scanRow(rows[i], mapper)
+		// 新列优先，兼容旧格式的商品规格商家编码。
+		if row.Code == "" && legacyCodeCol >= 0 && legacyCodeCol < len(rows[i]) {
+			row.Code = rows[i][legacyCodeCol]
+		}
 		if row.Code == "" {
 			row.Code = "未知"
 		}
@@ -406,7 +414,7 @@ func writeOrderSummarySheet(f *excelize.File, name string, orderIDs []string) {
 }
 
 func writeSheet(f *excelize.File, name string, rows []RowData) {
-	headers := []string{"店铺名称", "订单编号", "子订单编号", "买家昵称", "收件人姓名", "收件人手机号", "收件人详细地址", "付款时间", "买家留言", "卖家备注", "商品商家编码", "商品规格", "商品数量"}
+	headers := []string{"店铺名称", "订单编号", "子订单编号", "买家昵称", "收件人姓名", "收件人手机号", "收件人详细地址", "付款时间", "买家留言", "卖家备注", "商家编码", "商品规格", "商品数量"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		f.SetCellValue(name, cell, h)
@@ -433,7 +441,7 @@ func createSheet(f *excelize.File, name string, rows []RowData) {
 func createSheetWithGrouping(f *excelize.File, name string, rows []RowData) {
 	f.NewSheet(name)
 
-	headers := []string{"店铺名称", "订单编号", "子订单编号", "买家昵称", "收件人姓名", "收件人手机号", "收件人详细地址", "付款时间", "买家留言", "卖家备注", "商品商家编码", "商品规格", "商品数量"}
+	headers := []string{"店铺名称", "订单编号", "子订单编号", "买家昵称", "收件人姓名", "收件人手机号", "收件人详细地址", "付款时间", "买家留言", "卖家备注", "商家编码", "商品规格", "商品数量"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		f.SetCellValue(name, cell, h)

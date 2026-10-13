@@ -83,3 +83,65 @@ func TestWriteOutputOrderSummaryFirst(t *testing.T) {
 		t.Fatalf("summary rows = %v, want %v", rows, wantRows)
 	}
 }
+
+func TestFilterSpecMerchantCode(t *testing.T) {
+	rows, err := ParseRows([][]string{
+		{"订单编号", "商品商家编码", "商品规格商家编码", "商品规格", "商品数量"},
+		{"123", "旧商品编码", "【素材-ABC123】", "iPhone|透明壳", "1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Code != "【素材-ABC123】" {
+		t.Fatalf("rows=%+v", rows)
+	}
+	result := ProcessData(rows, &Config{})
+	output := filepath.Join(t.TempDir(), "筛选结果.xlsx")
+	if err := writeOutput(output, result); err != nil {
+		t.Fatal(err)
+	}
+	f, err := excelize.OpenFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for _, sheet := range []string{"多件订单", "疑难单", "单独配件", "正常手机壳"} {
+		got, err := f.GetCellValue(sheet, "K1")
+		if err != nil || got != "商家编码" {
+			t.Fatalf("sheet=%s header=%q err=%v", sheet, got, err)
+		}
+	}
+	got, err := f.GetCellValue("正常手机壳", "K2")
+	if err != nil || got != "【素材-ABC123】" {
+		t.Fatalf("code=%q err=%v", got, err)
+	}
+}
+
+func TestParseRowsMerchantCodeAliases(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		headers []string
+		values  []string
+		want    string
+	}{
+		{"新列", []string{"商家编码"}, []string{"new"}, "new"},
+		{"旧列", []string{"商品规格商家编码"}, []string{"old"}, "old"},
+		{"新列优先", []string{"商家编码", "商品规格商家编码"}, []string{"new", "old"}, "new"},
+		{"列顺序不影响优先级", []string{"商品规格商家编码", "商家编码"}, []string{"old", "new"}, "new"},
+		{"新列为空", []string{"商家编码", "商品规格商家编码"}, []string{"", "old"}, "old"},
+		{"均为空", []string{"商家编码", "商品规格商家编码"}, []string{"", ""}, "未知"},
+		{"短行", []string{"商家编码", "商品规格商家编码"}, []string{""}, "未知"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			headers := append([]string{"订单编号"}, tc.headers...)
+			values := append([]string{"123"}, tc.values...)
+			rows, err := ParseRows([][]string{headers, values})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rows) != 1 || rows[0].Code != tc.want {
+				t.Fatalf("rows=%+v want=%q", rows, tc.want)
+			}
+		})
+	}
+}

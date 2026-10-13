@@ -30,6 +30,10 @@ test('runFilter: 下载的第一页是去重订单号汇总', async () => {
   await new Promise(resolve => setImmediate(resolve));
   download();
   assert.strictEqual(downloaded[0].name, '多疑单订单汇总');
+  for (const sheet of downloaded.slice(1)) {
+    assert.ok(sheet.headers.includes('商家编码'));
+    assert.ok(!sheet.headers.includes('商品商家编码'));
+  }
   assert.strictEqual(Array.from(downloaded[0].headers).join(','), '订单编号');
   assert.deepStrictEqual(Array.from(downloaded[0].rows, row => Array.from(row)),
     [['multi'], ['doubt'], ['accessory']]);

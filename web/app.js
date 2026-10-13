@@ -155,7 +155,7 @@ async function runFilter() {
       '单独配件': data.summary.accessoryRows,
       '总计': data.summary.total
     };
-    const outputHeaders = ['店铺名称','订单编号','子订单编号','买家昵称','收件人姓名','收件人手机号','收件人详细地址','付款时间','买家留言','卖家备注','商品商家编码','商品规格','商品数量'];
+    const outputHeaders = ['店铺名称','订单编号','子订单编号','买家昵称','收件人姓名','收件人手机号','收件人详细地址','付款时间','买家留言','卖家备注','商家编码','商品规格','商品数量'];
     const sheets = [];
     sheets.push({ name: '多疑单订单汇总', headers: ['订单编号'], rows: (data.orderSummary || []).map(orderID => [orderID]) });
     const addSheet = (name, items) => {
